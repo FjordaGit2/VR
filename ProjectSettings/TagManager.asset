@@ -26,6 +26,17 @@ TagManager:
   - Instructions
   - Lecture
   - PaperPlane
+  - LeftWall
+  - RightWall
+  - TVWall
+  - TVTable
+  - Floor
+  - Ceiling
+  - BackWall
+  - Couch
+  - Fire
+  - MarkAvatar
+  - JulieAvatar
   layers:
   - Default
   - TransparentFX
