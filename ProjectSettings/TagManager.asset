@@ -37,6 +37,8 @@ TagManager:
   - Fire
   - MarkAvatar
   - JulieAvatar
+  - Chimney
+  - Kitchen
   layers:
   - Default
   - TransparentFX
