@@ -2,7 +2,7 @@
 
 public class Constant
 {
-    public const string DOMAIN = @"https://www.oxforia.com/api/apifjm82/vrenvironments/";
+    public const string DOMAIN = @"https://www.fjordakazazi.com/api/apifjm82/vrenvironments/";
     public const string Level = @"common/save_level";
     public const string Clear = @"common/clear_data";
     public const string USER = @"user/save_user";

@@ -1,7 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using Valve.VR;
 using UnityEngine.UI;
 using PupilLabs;
@@ -50,9 +51,7 @@ public class SC3aStreet : LevelScript
 
         Scene scene = SceneManager.GetActiveScene();
 
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc4Street/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc4Street/{UserName}/Behavioural";
 
         bool connected = recorder.requestCtrl.IsConnected;
 
@@ -182,16 +181,8 @@ public class SC3aStreet : LevelScript
 
     IEnumerator Post(bool IsLeft)
     {
-        
         isPressed = true;
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("car_shown", (SpawnPosIndex == 0) ? "Left": "Right"));
-        formData.Add(new MultipartFormDataSection("arrow_pressed", (IsLeft) ? "Left": "Right"));
-        formData.Add(new MultipartFormDataSection("accuracy", (SpawnPosIndex == 0 == IsLeft) ? "Correct": "Wrong"));
-        formData.Add(new MultipartFormDataSection("reaction_time", ((Time.time - startTime) * 1000).ToString("0.0")));
-        
-
+        string looked = "";
         if (gazeData != null)
         {
             Vector3 origin = gazeOriginCamera.position;
@@ -201,29 +192,31 @@ public class SC3aStreet : LevelScript
             {
                 if (hit.collider.CompareTag("Left"))
                 {
-                    formData.Add(new MultipartFormDataSection("looked", "Left"));
+                    looked = "Left";
                 }
                 else if (hit.collider.CompareTag("Right"))
                 {
-                    formData.Add(new MultipartFormDataSection("looked", "Right"));
+                    looked = "Right";
                 }
                 else
                 {
-                    formData.Add(new MultipartFormDataSection("looked", "Else"));
+                    looked = "Else";
                 }
 
             }
         }
 
-        string url = Constant.DOMAIN + (Constant.SC3AData);
-
-        //Debug.Log(url);
-        UnityWebRequest www = UnityWebRequest.Post(url, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError(www.error);
-        }
+        string dir = recorder != null ? recorder.customPath : $"{Application.dataPath}/Data/{UserGroup}/Sc4Street/{UserName}/Behavioural";
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "task_trials.csv");
+        if (!File.Exists(path))
+            File.WriteAllText(path, "username,car_shown,arrow_pressed,accuracy,reaction_time_ms,looked,created_at\n", new UTF8Encoding(false));
+        string accuracy = (SpawnPosIndex == 0 == IsLeft) ? "Correct" : "Wrong";
+        string carShown = (SpawnPosIndex == 0) ? "Left" : "Right";
+        string arrowPressed = IsLeft ? "Left" : "Right";
+        string reaction = ((Time.time - startTime) * 1000).ToString("0.0");
+        File.AppendAllText(path, $"{UserName},{carShown},{arrowPressed},{accuracy},{reaction},{looked},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
+        yield break;
     }
     IEnumerator ShowCar()
     {

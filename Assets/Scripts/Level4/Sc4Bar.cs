@@ -15,8 +15,7 @@ public class Sc4Bar : LevelScript
 
     void Awake()
     {
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc6Club/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc6Club/{UserName}/Behavioural";
         bool connected = recorder.requestCtrl.IsConnected;
     }
 

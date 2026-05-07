@@ -1,8 +1,8 @@
-﻿using SimpleJSON;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using TMPro;
 using Valve.VR;
 using UnityEngine.UI;
@@ -45,9 +45,7 @@ public class Sc2aLectureHall : LevelScript
 
         Scene scene = SceneManager.GetActiveScene();
 
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc2LectureHall/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc2LectureHall/{UserName}/Behavioural";
 
         bool connected = recorder.requestCtrl.IsConnected;
         
@@ -330,26 +328,21 @@ public class Sc2aLectureHall : LevelScript
     {
 
         posted = true;
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("digit", currentNumber.ToString()));
-        formData.Add(new MultipartFormDataSection("spacebar_trigger_pressed", (pressed) ? "YES" : "NO"));
-        if (pressed)
+        string dir = recorder != null ? recorder.customPath : $"{Application.dataPath}/Data/{UserGroup}/Sc2LectureHall/{UserName}/Behavioural";
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "task_trials.csv");
+        if (!File.Exists(path))
+            File.WriteAllText(path, "username,digit,trigger_pressed,accuracy,reaction_time_ms,created_at\n", new UTF8Encoding(false));
+
+        string accuracy = pressed ? ((currentNumber == 3) ? "Correct" : "Wrong") : "";
+        string reactionMs = pressed ? ((Time.time - startTime) * 1000).ToString("0.0") : "";
+        File.AppendAllText(path, $"{UserName},{currentNumber},{(pressed ? "YES" : "NO")},{accuracy},{reactionMs},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
+
+        if (!pressed)
         {
-            formData.Add(new MultipartFormDataSection("accuracy", (currentNumber == 3) ? "Correct" : "Wrong"));
-            formData.Add(new MultipartFormDataSection("reaction_time", ((Time.time - startTime) * 1000).ToString("0.0")));
-
-            
+            yield break;
         }
-
-        
-
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + (Constant.SC2Data), formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError(www.error);
-        }
+        yield break;
     }
     IEnumerator ShowNumber(bool _startDelay = false)
     {

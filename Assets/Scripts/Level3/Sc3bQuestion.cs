@@ -1,8 +1,7 @@
-﻿using SimpleJSON;
-using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections;
+using System.IO;
+using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.UI;
 
 public class Sc3bQuestion : MonoBehaviour
@@ -32,36 +31,25 @@ public class Sc3bQuestion : MonoBehaviour
     }
     IEnumerator PostData()
     {
-        
         BtSubmit.interactable = false;
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", LevelScript.UserName));
-        formData.Add(new MultipartFormDataSection("q1", _q1));
-        formData.Add(new MultipartFormDataSection("q2", _q2));
-        formData.Add(new MultipartFormDataSection("q3", _q3));
-        formData.Add(new MultipartFormDataSection("q4", _q4));
-        formData.Add(new MultipartFormDataSection("q5", _q5));
-        formData.Add(new MultipartFormDataSection("q6", _q6));
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.SC3BQS, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
+        try
         {
-            Debug.LogError(www.error);
+            string dir = $"{Application.dataPath}/Data/{LevelScript.UserGroup}/Sc3bQuestionnaire/{LevelScript.UserName}";
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "answers.csv");
+            if (!File.Exists(path))
+                File.WriteAllText(path, "username,q1,q2,q3,q4,q5,q6,created_at\n", new UTF8Encoding(false));
+            File.AppendAllText(path, $"{LevelScript.UserName},{_q1},{_q2},{_q3},{_q4},{_q5},{_q6},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
+
+            StartCoroutine(LevelScript.SetLevel(SceneType.Sc4Bar));
+            LevelScript.NextScene();
         }
-        else
+        catch (System.Exception e)
         {
-            JSONNode data = JSON.Parse(www.downloadHandler.text);
-            Debug.Log(www.downloadHandler.text);
-            if (data["status"] == "success")
-            {
-                StartCoroutine(LevelScript.SetLevel(SceneType.Sc4Bar));
-                LevelScript.NextScene();
-            }
-            else
-            {
-                Debug.LogError(data["msg"]);
-                // ErrorMessage.text = data["msg"];
-            }
+            Debug.LogError($"Sc3bQuestion local save failed: {e.Message}");
+            BtSubmit.interactable = true;
         }
+
+        yield break;
     }
 }

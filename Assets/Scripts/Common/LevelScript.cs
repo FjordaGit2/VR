@@ -1,7 +1,7 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -52,17 +52,25 @@ public class LevelScript : MonoBehaviour
     }
     public static IEnumerator SetLevel(SceneType sceneType)
     {
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("level", sceneType.ToString()));
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.Level, formData);
-        yield return www.SendWebRequest();
+        try
+        {
+            string dataDir = $"{Application.dataPath}/Data";
+            Directory.CreateDirectory(dataDir);
+            string levelPath = $"{dataDir}/level_progress.csv";
+            if (!File.Exists(levelPath))
+                File.WriteAllText(levelPath, "username,group,level,created_at\n", new UTF8Encoding(false));
+            File.AppendAllText(levelPath, $"{UserName},{UserGroup},{sceneType},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"SetLevel local save failed: {e.Message}");
+        }
+
+        yield break;
     }
     public static IEnumerator ClearData(string table)
     {
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        UnityWebRequest www = UnityWebRequest.Delete($"{Constant.DOMAIN}{Constant.Clear}?username={UserName}&table={table}");
-        yield return www.SendWebRequest();
+        yield break;
     }
 
     public static void LoadScene(string sceneName)

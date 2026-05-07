@@ -1,8 +1,8 @@
 ﻿using System.Collections;
+using System.IO;
+using System.Text;
 using UnityEngine;
 using DG.Tweening;
-using UnityEngine.Networking;
-using System.Collections.Generic;
 using Valve.VR;
 using UnityEngine.UI;
 using PupilLabs;
@@ -55,8 +55,7 @@ public class Sc6Train : LevelScript
 
     void Awake()
     {
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc8TrainStation/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc8TrainStation/{UserName}/Behavioural";
         bool connected = recorder.requestCtrl.IsConnected;
         Pointer.SetActive(true);
     }
@@ -125,20 +124,16 @@ public class Sc6Train : LevelScript
         string accuracy = "High";
         if (marks < 7) accuracy = "Medium";
         if (marks < 5) accuracy = "Low";
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("reaction_time", (time * 1000).ToString("0.0")));
-        formData.Add(new MultipartFormDataSection("accuracy", accuracy));
-        formData.Add(new MultipartFormDataSection("button_pressed", buttonClickCount.ToString()));
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.SC6Data, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError(www.error);
-        }
+        string dir = recorder != null ? recorder.customPath : $"{Application.dataPath}/Data/{UserGroup}/Sc8TrainStation/{UserName}/Behavioural";
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "summary.csv");
+        if (!File.Exists(path))
+            File.WriteAllText(path, "username,reaction_time_ms,accuracy,button_pressed,created_at\n", new UTF8Encoding(false));
+        File.AppendAllText(path, $"{UserName},{(time * 1000).ToString("0.0")},{accuracy},{buttonClickCount},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
         recorder.StopRecording();
         StartCoroutine(SetLevel(SceneType.Sc6Questionnaire));
         NextScene();
+        yield break;
     }
     IEnumerator GernerateTrain()
     {

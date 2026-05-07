@@ -1,11 +1,9 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.UI;
-using SimpleJSON;
 using System.IO;
+using System.Text;
 
 
 public class Loginmanager : MonoBehaviour
@@ -21,6 +19,7 @@ public class Loginmanager : MonoBehaviour
     [SerializeField] TMP_Text ErrorMessage = null;
 
     private string UserId;
+    const string DemographicsHeader = "username,age,gender,highest_education,group,vision,hearing,platform,created_at";
 
     string _platform;
     public string Platform
@@ -40,72 +39,58 @@ public class Loginmanager : MonoBehaviour
 
     public IEnumerator Login()
     {
-        string path = "";
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
+        string username = IFUserName.text.Trim();
+        string group = DDGroup.captionText.text;
+        string baseDataPath = $"{Application.dataPath}/Data";
+        string groupPath = $"{baseDataPath}/{group}";
+        string demographicsPath = $"{baseDataPath}/demographics.csv";
+        string sc1LivingRoomUserPath = $"{groupPath}/Sc1LivingRoom/{username}";
 
         BtSubmit.interactable = false;
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", IFUserName.text));
-        formData.Add(new MultipartFormDataSection("age", IFAge.text));
-        formData.Add(new MultipartFormDataSection("gender", DDGender.captionText.text));
-        formData.Add(new MultipartFormDataSection("highest_education", DDHighestEducation.captionText.text));
-        formData.Add(new MultipartFormDataSection("group", DDGroup.captionText.text));
-        formData.Add(new MultipartFormDataSection("vision", DDVision.captionText.text));
-        formData.Add(new MultipartFormDataSection("hearing", DDHearing.captionText.text));
-        formData.Add(new MultipartFormDataSection("platform", Platform));
-
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.USER, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
+        try
         {
-            Debug.LogError(www.error);
+            Directory.CreateDirectory(baseDataPath);
+            Directory.CreateDirectory(groupPath);
+            Directory.CreateDirectory(sc1LivingRoomUserPath);
+
+            StringBuilder rowBuilder = new StringBuilder(256);
+            rowBuilder.Append(EscapeCsv(username)).Append(",");
+            rowBuilder.Append(EscapeCsv(IFAge.text.Trim())).Append(",");
+            rowBuilder.Append(EscapeCsv(DDGender.captionText.text)).Append(",");
+            rowBuilder.Append(EscapeCsv(DDHighestEducation.captionText.text)).Append(",");
+            rowBuilder.Append(EscapeCsv(group)).Append(",");
+            rowBuilder.Append(EscapeCsv(DDVision.captionText.text)).Append(",");
+            rowBuilder.Append(EscapeCsv(DDHearing.captionText.text)).Append(",");
+            rowBuilder.Append(EscapeCsv(Platform)).Append(",");
+            rowBuilder.AppendLine(System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+
+            if (!File.Exists(demographicsPath))
+                File.WriteAllText(demographicsPath, DemographicsHeader + "\n", new UTF8Encoding(false));
+            File.AppendAllText(demographicsPath, rowBuilder.ToString(), new UTF8Encoding(false));
+
+            LevelScript.UserName = username;
+            LevelScript.UserGroup = group;
+            LevelScript.IsVR = Platform == "VR";
+
+            LevelScript.NextScene();
         }
-        else
+        catch (System.Exception e)
         {
-            JSONNode data = JSON.Parse(www.downloadHandler.text);
-            if (data["status"] == "success")
-            {
-                LevelScript.UserName = IFUserName.text;
-                LevelScript.UserGroup = DDGroup.captionText.text;
-
-                LevelScript.IsVR = Platform == "VR";
-
-                if (DDGroup.captionText.text == "Control")
-                {
-                    path = $"{Application.dataPath}/Data/Control/{IFUserName.text + "_" + date}";
-
-                }
-                else if (DDGroup.captionText.text == "ADHD")
-                {
-                    path = $"{Application.dataPath}/Data/ADHD/{IFUserName.text + "_" + date}";
-
-                }
-                else if (DDGroup.captionText.text == "Stuttering")
-                {
-                    path = $"{Application.dataPath}/Data/Stuttering/{IFUserName.text + "_" + date}";
-
-                }
-
-                if (!Directory.Exists(path))
-                {
-                    Directory.CreateDirectory(path);
-                }
-                string level = data["data"]["level"];
-                if (level == null || level == "")
-                {
-                    LevelScript.NextScene();
-                }
-                else
-                {
-                    LevelScript.LoadScene(level);
-                }
-            }
-            else
-            {
-                Debug.LogError(data["msg"]);
-                StartCoroutine(Error(data["msg"]));
-            }
+            Debug.LogError($"Local save failed: {e.Message}");
+            StartCoroutine(Error("Could not save local user data. Please try again."));
+            BtSubmit.interactable = true;
         }
+
+        yield break;
+    }
+
+    static string EscapeCsv(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+        if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
     }
 
     void Validate()

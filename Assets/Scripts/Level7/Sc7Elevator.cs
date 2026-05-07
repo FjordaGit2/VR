@@ -1,7 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using Valve.VR;
 using UnityEngine.UI;
 using PupilLabs;
@@ -95,8 +96,7 @@ public class Sc7Elevator : LevelScript {
 
     void Awake() {
 
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc9Elevator/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc9Elevator/{UserName}/Behavioural";
 
         Moving = false;
         BtnSoundFX = GetComponent<AudioSource>();
@@ -401,18 +401,13 @@ public class Sc7Elevator : LevelScript {
         string accuracy = "High";
         if (marks < 7) accuracy = "Medium";
         if (marks < 5) accuracy = "Low";
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("reaction_time", (reactionTime * 1000).ToString("0.0")));
-        formData.Add(new MultipartFormDataSection("accuracy", accuracy));
-        formData.Add(new MultipartFormDataSection("phone_pressed", phonePressed.ToString()));
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.SC7Data, formData);
-        yield return www.SendWebRequest();
+        string dir = recorder != null ? recorder.customPath : $"{Application.dataPath}/Data/{UserGroup}/Sc9Elevator/{UserName}/Behavioural";
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "summary.csv");
+        if (!File.Exists(path))
+            File.WriteAllText(path, "username,reaction_time_ms,accuracy,phone_pressed,is_right_choice,created_at\n", new UTF8Encoding(false));
+        File.AppendAllText(path, $"{UserName},{(reactionTime * 1000).ToString("0.0")},{accuracy},{phonePressed},{(isRight ? 1 : 0)},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
 
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError(www.error);
-        }
         recorder.StopRecording();
         StartCoroutine(SetLevel(SceneType.Sc7Questionnaire));
         NextScene();

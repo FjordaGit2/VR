@@ -1,11 +1,12 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnitySimpleLiquid;
 using PupilLabs;
-using UnityEngine.Networking;
 
 public class Sc8ChemistryLab : LevelScript
 {
@@ -61,8 +62,7 @@ public class Sc8ChemistryLab : LevelScript
 
     void Awake()
     {
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc10ChemistryLab/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc10ChemistryLab/{UserName}/Behavioural";
     }
 
     void OnDestroy()
@@ -372,20 +372,15 @@ public class Sc8ChemistryLab : LevelScript
         string accuracy = "High";
         if (score < 60f) accuracy = "Medium";
         if (score < 20f) accuracy = "Low";
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("attention_average", attentionAverage.ToString()));
-        formData.Add(new MultipartFormDataSection("score", score.ToString()));
-        formData.Add(new MultipartFormDataSection("accuracy", accuracy));
-        formData.Add(new MultipartFormDataSection("reaction_time", (time * 1000).ToString("0.0")));
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.SC8Data, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError(www.error);
-        }
+        string dir = recorder != null ? recorder.customPath : $"{Application.dataPath}/Data/{UserGroup}/Sc10ChemistryLab/{UserName}/Behavioural";
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "summary.csv");
+        if (!File.Exists(path))
+            File.WriteAllText(path, "username,attention_average,score,accuracy,reaction_time_ms,created_at\n", new UTF8Encoding(false));
+        File.AppendAllText(path, $"{UserName},{attentionAverage},{score},{accuracy},{(time * 1000).ToString("0.0")},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
         StartCoroutine(SetLevel(SceneType.Sc8Questionnaire));
         NextScene();
+        yield break;
 
     }
 

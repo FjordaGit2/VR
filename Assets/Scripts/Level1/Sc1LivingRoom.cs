@@ -8,8 +8,6 @@ using UnityEngine.UI;
 using Looxid.Link;
 using System.IO;
 using System.Text;
-using UnityEngine.Networking;
-using SimpleJSON;
 using System;
 using System.Globalization;
 using UnityEngine.SceneManagement;
@@ -77,8 +75,7 @@ public class Sc1LivingRoom : LevelScript
 
     void Awake()
     {
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc1LivingRoom/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc1LivingRoom/{UserName}/Behavioural";
     }
 
     private void OnEnable()
@@ -653,19 +650,27 @@ public class Sc1LivingRoom : LevelScript
         float tvDwell = lookedtvcount * period;
         float elseDwell = lookedelsecount * period;
 
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("lookedtvcount", lookedtvcount.ToString()));
-        formData.Add(new MultipartFormDataSection("lookedtvtime", tvDwell.ToString("0.0", CultureInfo.InvariantCulture)));
-        formData.Add(new MultipartFormDataSection("lookedelsecount", lookedelsecount.ToString()));
-        formData.Add(new MultipartFormDataSection("lookedelsetime", elseDwell.ToString("0.0", CultureInfo.InvariantCulture)));
+        try
+        {
+            string dir = recorder != null ? recorder.customPath : "";
+            if (string.IsNullOrWhiteSpace(dir))
+            {
+                dir = $"{Application.dataPath}/Data/{UserGroup}/Sc1LivingRoom/{UserName}/Behavioural";
+            }
 
-        string url = Constant.DOMAIN + Constant.SC1EyeTrackingData;
+            Directory.CreateDirectory(dir);
+            string summaryPath = Path.Combine(dir, "sc1_summary.csv");
+            string summary =
+                "username,lookedtvcount,lookedtvtime,lookedelsecount,lookedelsetime,created_at\n" +
+                $"{UserName},{lookedtvcount},{tvDwell.ToString("0.0", CultureInfo.InvariantCulture)},{lookedelsecount},{elseDwell.ToString("0.0", CultureInfo.InvariantCulture)},{System.DateTime.Now:O}\n";
+            File.WriteAllText(summaryPath, summary, new UTF8Encoding(false));
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"Sc1LivingRoom: failed to save local summary ({e.Message})");
+        }
 
-        UnityWebRequest www = UnityWebRequest.Post(url, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
-            Debug.LogError(www.error);
+        yield break;
     }
 
     new public void StartTask()

@@ -1,8 +1,8 @@
-﻿using SimpleJSON;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
-using UnityEngine.Networking;
 using Valve.VR;
 using UnityEngine.UI;
 using PupilLabs;
@@ -60,8 +60,7 @@ public class Sc5Street : LevelScript
     {
         Pointer.SetActive(true);
         Instance = this;
-        string date = System.DateTime.Now.ToString("yyyy_MM_dd");
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/{UserName + "_" + date}/Sc7StreetPedestrian/EyeTracking";
+        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc7StreetPedestrian/{UserName}/Behavioural";
         camera.clearFlags = CameraClearFlags.Skybox;
     }
 
@@ -194,20 +193,17 @@ public class Sc5Street : LevelScript
         string accuracy = "High";
         if (marks < 8) accuracy = "Medium";
         if (marks < 5) accuracy = "Low";
-        List<IMultipartFormSection> formData = new List<IMultipartFormSection>();
-        formData.Add(new MultipartFormDataSection("username", UserName));
-        formData.Add(new MultipartFormDataSection("reaction_time", ((Time.time - startTime) * 1000).ToString("0.0")));
-        formData.Add(new MultipartFormDataSection("map_pressed", mapOpenCount.ToString()));
-        formData.Add(new MultipartFormDataSection("accuracy", accuracy));
-        UnityWebRequest www = UnityWebRequest.Post(Constant.DOMAIN + Constant.SC5Data, formData);
-        yield return www.SendWebRequest();
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError(www.error);
-        }
+        string dir = recorder != null ? recorder.customPath : $"{Application.dataPath}/Data/{UserGroup}/Sc7StreetPedestrian/{UserName}/Behavioural";
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "summary.csv");
+        if (!File.Exists(path))
+            File.WriteAllText(path, "username,reaction_time_ms,map_pressed,accuracy,created_at\n", new UTF8Encoding(false));
+        string row = $"{UserName},{((Time.time - startTime) * 1000).ToString("0.0")},{mapOpenCount},{accuracy},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n";
+        File.AppendAllText(path, row, new UTF8Encoding(false));
         recorder.StopRecording();
         StartCoroutine(SetLevel(SceneType.Sc5Questionnaire));
         NextScene();
+        yield break;
     }
     IEnumerator MapClose()
     {
