@@ -67,6 +67,10 @@ public class Sc1LivingRoom : LevelScript
     float headLastAngSpeed;
     int headKinTickCount;
 
+    string _gazeSessionId;
+    string _gazeCsvParticipantGroup;
+    string _gazeCsvParticipantId;
+
     const int StateTv = 1;
     const int StateNotTv = 0;
     const int StateInvalid = -1;
@@ -75,7 +79,7 @@ public class Sc1LivingRoom : LevelScript
 
     void Awake()
     {
-        recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc1LivingRoom/{UserName}/Behavioural";
+        recorder.customPath = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom);
     }
 
     private void OnEnable()
@@ -146,6 +150,8 @@ public class Sc1LivingRoom : LevelScript
         string hitName = "";
         string hitTag = "";
         string invalidReason = "";
+        Vector3 worldGazeUnit = default;
+        bool haveWorldGazeDir = false;
 
         GazeData gd = gazeData;
         bool gazePacket = gd != null;
@@ -182,36 +188,53 @@ public class Sc1LivingRoom : LevelScript
                 hitTag = "";
                 invalidReason = "ray_fail";
             }
-            else if (Physics.SphereCast(origin, 0.05f, direction, out RaycastHit hit, Mathf.Infinity))
+            else
             {
-                valid = 1;
-                var col = hit.collider;
-                if (col != null)
+                worldGazeUnit = direction.normalized;
+                haveWorldGazeDir = true;
+                if (Physics.SphereCast(origin, 0.05f, direction, out RaycastHit hit, Mathf.Infinity))
                 {
-                    hitName = col.gameObject.name;
-                    hitTag = col.tag;
-                    state = col.CompareTag("TV") ? StateTv : StateNotTv;
+                    valid = 1;
+                    var col = hit.collider;
+                    if (col != null)
+                    {
+                        hitName = col.gameObject.name;
+                        hitTag = col.tag;
+                        state = col.CompareTag("TV") ? StateTv : StateNotTv;
+                    }
+                    else
+                    {
+                        hitName = "";
+                        hitTag = "";
+                        state = StateNotTv;
+                    }
+
+                    invalidReason = "";
                 }
                 else
                 {
-                    hitName = "";
-                    hitTag = "";
+                    valid = 1;
                     state = StateNotTv;
+                    hitName = "no_hit";
+                    hitTag = "";
+                    invalidReason = "";
                 }
-
-                invalidReason = "";
-            }
-            else
-            {
-                valid = 1;
-                state = StateNotTv;
-                hitName = "no_hit";
-                hitTag = "";
-                invalidReason = "";
             }
         }
 
-        WriteTimeseriesRow(sinceVideo, gazePacket, havePupilTs, pupilTs, conf, valid, state, hitName, hitTag, invalidReason);
+        string glx = "", gly = "", glz = "", gyaw = "", gpit = "", gu = "", gv = "";
+        if (haveWorldGazeDir && gazeOriginCamera != null)
+            VrGazeEquirectMetrics.TryFormatCsvFields(gazeOriginCamera, worldGazeUnit, out glx, out gly, out glz, out gyaw, out gpit, out gu, out gv);
+
+        string gwx = "", gwy = "", gwz = "";
+        if (haveWorldGazeDir)
+        {
+            gwx = F(worldGazeUnit.x);
+            gwy = F(worldGazeUnit.y);
+            gwz = F(worldGazeUnit.z);
+        }
+
+        WriteTimeseriesRow(sinceVideo, gazePacket, havePupilTs, pupilTs, conf, valid, state, hitName, hitTag, invalidReason, glx, gly, glz, gyaw, gpit, gu, gv, gwx, gwy, gwz);
 
         if (!hasPreviousObservedState)
         {
@@ -222,7 +245,7 @@ public class Sc1LivingRoom : LevelScript
         {
             string ev = EventForTransition(previousObservedState, state);
             if (ev != null)
-                WriteEventRow(sinceVideo, havePupilTs, pupilTs, conf, valid, hitName, hitTag, invalidReason, ev);
+                WriteEventRow(sinceVideo, havePupilTs, pupilTs, conf, valid, hitName, hitTag, invalidReason, ev, glx, gly, glz, gyaw, gpit, gu, gv, gwx, gwy, gwz);
             previousObservedState = state;
         }
 
@@ -469,6 +492,7 @@ public class Sc1LivingRoom : LevelScript
             sb.Append("\"schema\":\"sc1_scene_rois v1\",");
             sb.Append("\"unity_scene_name\":").Append(JsonString(scene.name)).Append(',');
             sb.Append("\"unity_time_at_snapshot\":").Append(F(Time.time)).Append(',');
+            sb.Append("\"equirect_heatmap_columns\":").Append(JsonString("gaze_hmd_local_x,y,z (HMD +Z forward +Y up); yaw_deg; pitch_deg; equirect_u,v zenith-top pano; see VrGazeEquirectMetrics")).Append(',');
             AppendTransformBlock(sb, "tv", GetTvTransformForSnapshot());
             sb.Append(',');
             AppendTransformBlock(sb, "hmd_origin_at_session_start", gazeOriginCamera);
@@ -480,6 +504,7 @@ public class Sc1LivingRoom : LevelScript
 
             const string roiTvTemplate = "{\"roi_name\":\"TV\",\"type\":\"polygon\",\"points\":[],\"note\":\"Normalized panorama UV polygon; fill after calibration or external tooling.\"}";
             File.WriteAllText(Path.Combine(sessionDir, "roi_tv.json"), roiTvTemplate, new UTF8Encoding(false));
+            LevelScript.WritePanoReferenceJson(sessionDir, scene.name);
         }
         catch (Exception e)
         {
@@ -543,7 +568,7 @@ public class Sc1LivingRoom : LevelScript
     static string F(double v) => v.ToString("G17", CultureInfo.InvariantCulture);
     static string F(float v) => v.ToString("G9", CultureInfo.InvariantCulture);
 
-    void WriteTimeseriesRow(float sinceVideo, bool gazePacket, bool havePupilTs, double pupilTs, float conf, int valid, int state, string hitName, string hitTag, string invalidReason)
+    void WriteTimeseriesRow(float sinceVideo, bool gazePacket, bool havePupilTs, double pupilTs, float conf, int valid, int state, string hitName, string hitTag, string invalidReason, string glx, string gly, string glz, string gyaw, string gpit, string gu, string gv, string gwx, string gwy, string gwz)
     {
         if (timeseriesWriter == null)
             return;
@@ -558,10 +583,15 @@ public class Sc1LivingRoom : LevelScript
             valid.ToString(CultureInfo.InvariantCulture),
             CsvEscape(hitName),
             CsvEscape(hitTag),
-            CsvEscape(invalidReason)));
+            CsvEscape(invalidReason),
+            glx, gly, glz, gyaw, gpit, gu, gv,
+            gwx, gwy, gwz,
+            _gazeCsvParticipantGroup,
+            _gazeCsvParticipantId,
+            _gazeSessionId));
     }
 
-    void WriteEventRow(float sinceVideo, bool havePupilTs, double pupilTs, float conf, int valid, string hitName, string hitTag, string invalidReason, string ev)
+    void WriteEventRow(float sinceVideo, bool havePupilTs, double pupilTs, float conf, int valid, string hitName, string hitTag, string invalidReason, string ev, string glx, string gly, string glz, string gyaw, string gpit, string gu, string gv, string gwx, string gwy, string gwz)
     {
         if (eventsWriter == null)
             return;
@@ -575,7 +605,12 @@ public class Sc1LivingRoom : LevelScript
             valid.ToString(CultureInfo.InvariantCulture),
             CsvEscape(hitName),
             CsvEscape(hitTag),
-            CsvEscape(invalidReason)));
+            CsvEscape(invalidReason),
+            glx, gly, glz, gyaw, gpit, gu, gv,
+            gwx, gwy, gwz,
+            _gazeCsvParticipantGroup,
+            _gazeCsvParticipantId,
+            _gazeSessionId));
     }
 
     void MaybePeriodicFlushCsv()
@@ -597,13 +632,17 @@ public class Sc1LivingRoom : LevelScript
         string dir = recorder.customPath;
         Directory.CreateDirectory(dir);
 
+        _gazeSessionId = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture).Substring(0, 8);
+        _gazeCsvParticipantGroup = CsvEscape(UserGroup ?? "");
+        _gazeCsvParticipantId = CsvEscape(UserName ?? "");
+
         timeseriesWriter = new StreamWriter(Path.Combine(dir, "gaze_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         eventsWriter = new StreamWriter(Path.Combine(dir, "gaze_events.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         headWriter = new StreamWriter(Path.Combine(dir, "head_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         controllerWriter = new StreamWriter(Path.Combine(dir, "controller_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
 
-        timeseriesWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,state,confidence,valid,hit_name,hit_tag,invalid_reason");
-        eventsWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,event,confidence,valid,hit_name,hit_tag,invalid_reason");
+        timeseriesWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
+        eventsWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
         headWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_tv,head_angle_to_tv");
         controllerWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,hand,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,velocity_linear,velocity_angular,trigger_pressed,grip_pressed,button_events");
 
@@ -655,7 +694,7 @@ public class Sc1LivingRoom : LevelScript
             string dir = recorder != null ? recorder.customPath : "";
             if (string.IsNullOrWhiteSpace(dir))
             {
-                dir = $"{Application.dataPath}/Data/{UserGroup}/Sc1LivingRoom/{UserName}/Behavioural";
+                dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom);
             }
 
             Directory.CreateDirectory(dir);

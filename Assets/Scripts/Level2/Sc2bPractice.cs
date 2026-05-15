@@ -1,16 +1,18 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Networking;
 using TMPro;
 using Valve.VR;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement;
 
 public class Sc2bPractice : MonoBehaviour
 {
     [SerializeField] TextMeshPro text = null;
-    [SerializeField] float delay = 1.15f;
+
+    [Space]
+    [Header("Trial timing (same as Sc2bLectureHall)")]
+    [Min(1)] public int stimulusDurationMs = 100;
+    [Min(0)] public int postStimulusBlankMs = 1100;
     int count = 0;
     int currentNumber = 0;
     int countPress = 0;
@@ -32,26 +34,21 @@ public class Sc2bPractice : MonoBehaviour
     public SteamVR_Action_Boolean grabPinchAction = SteamVR_Input.GetAction<SteamVR_Action_Boolean>("GrabPinch");
     public GameObject Pointer;
 
-   
-
-
     void Start()
     {
         Pointer.SetActive(true);
     }
 
-    // Update is called once per frame
     void Update()
     {
         StartPracticeBTNl.onClick.AddListener(buttonIsClicked);
-        
+
         if (praticeButtonIsClicked)
         {
             count2++;
 
-            if (count2 == 1) {
-
-
+            if (count2 == 1)
+            {
                 mylist.Clear();
                 mylist.Add(1);
                 mylist.Add(2);
@@ -86,62 +83,36 @@ public class Sc2bPractice : MonoBehaviour
                 StartPractice();
                 Pointer.SetActive(false);
                 buttonStartPractice.SetActive(false);
-                
-
-
-
             }
+
             if (currentNumber != 3 && grabPinchAction.GetStateDown(handType))
             {
                 countPress++;
 
-
-                if (countPress == 4)
+                if (countPress == 2)
                 {
                     StartCoroutine(PracticeCompleted());
                     text.enabled = false;
-
-
                 }
-
-
-
             }
-
         }
-
-
-       
-
-        
-
     }
 
     void buttonIsClicked()
     {
         praticeButtonIsClicked = true;
-       
-
-
     }
 
     void StartPractice()
     {
-
-        
         text.enabled = true;
         StartCoroutine(ShowNumber());
-
     }
-
-
 
     IEnumerator ShowNumber(bool _startDelay = false)
     {
         if (_startDelay)
-        {
             yield return new WaitForSeconds(3);
-        }
 
         if (mylist.Count > 0)
         {
@@ -150,34 +121,30 @@ public class Sc2bPractice : MonoBehaviour
             if (newNumber != currentNumber)
             {
                 currentNumber = newNumber;
-                text.text = currentNumber.ToString();
+                if (text != null)
+                    text.text = currentNumber.ToString();
 
-                yield return new WaitForSeconds(delay);
+                float stimSec = stimulusDurationMs * 0.001f;
+                float blankSec = postStimulusBlankMs * 0.001f;
+                yield return new WaitForSeconds(stimSec);
+                if (text != null)
+                    text.text = string.Empty;
+                yield return new WaitForSeconds(blankSec);
 
                 mylist.Remove(currentNumber);
-
             }
 
-
             StartCoroutine(ShowNumber());
-
         }
-        else if (countPress < 4 && mylist.Count == 0)
+        else if (countPress <= 1 && mylist.Count == 0)
         {
             StartCoroutine(StartAgain());
         }
-
-        
- 
     }
-
-    
 
     IEnumerator StartAgain()
     {
-
-
-        CanvasText.text = "Please start again. Make sure you press the trigger button of the controller for the digits other than digit 3.";
+        CanvasText.text = "Please start again. Make sure you press the trigger button of the controller for digits other than digit 3.";
         buttonStartPractice.SetActive(true);
         praticeButtonIsClicked = false;
         Pointer.SetActive(true);
@@ -185,18 +152,12 @@ public class Sc2bPractice : MonoBehaviour
         count2 = 0;
         count = 0;
         text.enabled = false;
-        
 
         yield return new WaitForSeconds(1f);
-       
-        //StartCoroutine(ShowNumber(false));
-
-
     }
 
     IEnumerator PracticeCompleted()
     {
-        
         CanvasText.text = "Practice completed. You will now start the calibration process.";
         yield return new WaitForSeconds(5f);
         EEG.SetActive(true);

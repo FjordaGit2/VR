@@ -44,7 +44,7 @@ public class Loginmanager : MonoBehaviour
         string baseDataPath = $"{Application.dataPath}/Data";
         string groupPath = $"{baseDataPath}/{group}";
         string demographicsPath = $"{baseDataPath}/demographics.csv";
-        string sc1LivingRoomUserPath = $"{groupPath}/Sc1LivingRoom/{username}";
+        string sc1LivingRoomUserPath = LevelScript.GetDataPathForLevel(LevelScript.DataFolderSc1LivingRoom, group, username);
 
         BtSubmit.interactable = false;
         try

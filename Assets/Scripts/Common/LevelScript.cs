@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -10,6 +11,61 @@ public class LevelScript : MonoBehaviour
     public static string UserName;
     public static string UserGroup;
     public static bool IsVR;
+
+    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc1 behavioural data (matches Loginmanager).</summary>
+    public const string DataFolderSc1LivingRoom = "Sc1LivingRoom";
+    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc2a behavioural data.</summary>
+    public const string DataFolderSc2LectureHall = "Sc2LectureHall";
+    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc2b behavioural data (inverted go/no-go vs Sc2a).</summary>
+    public const string DataFolderSc2bLectureHall = "Sc2bLectureHall";
+
+    /// <summary>Assets/Data/{userGroup}/{levelSubfolder}/{userName} — same layout as Loginmanager creates for Sc1.</summary>
+    public static string GetDataPathForLevel(string levelSubfolder, string userGroup, string userName)
+    {
+        return $"{Application.dataPath}/Data/{userGroup}/{levelSubfolder}/{userName}";
+    }
+
+    /// <summary>Assets/Data/{UserGroup}/{levelSubfolder}/{UserName} after login.</summary>
+    public static string GetDataPathForLevel(string levelSubfolder)
+    {
+        return GetDataPathForLevel(levelSubfolder, UserGroup, UserName);
+    }
+
+    /// <summary>Pupil + CSV session folder: .../{levelSubfolder}/{userName}/Behavioural</summary>
+    public static string GetBehaviouralPath(string levelSubfolder, string userGroup, string userName)
+    {
+        return $"{GetDataPathForLevel(levelSubfolder, userGroup, userName)}/Behavioural";
+    }
+
+    public static string GetBehaviouralPath(string levelSubfolder)
+    {
+        return GetBehaviouralPath(levelSubfolder, UserGroup, UserName);
+    }
+
+    /// <summary>Stub JSON: fill <c>pano_export</c> after you render one reference equirect in Unity (pose + image size) for offline gaze_world → pixel mapping.</summary>
+    public static void WritePanoReferenceJson(string sessionDir, string unitySceneName)
+    {
+        try
+        {
+            Directory.CreateDirectory(sessionDir);
+            string esc = unitySceneName ?? "";
+            esc = esc.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            string json =
+                "{\"schema\":\"pano_reference_v1\"," +
+                "\"unity_scene_name\":\"" + esc + "\"," +
+                "\"note\":\"Fill pano_export when you export one equirectangular reference from Unity (world pose + image dimensions). Map gaze_world_* to pixels offline.\"," +
+                "\"pano_export\":{" +
+                "\"position_xyz_m\":null,\"rotation_quat_wxyz\":null," +
+                "\"equirect_width_px\":null,\"equirect_height_px\":null,\"image_filename\":null" +
+                "}}";
+            File.WriteAllText(Path.Combine(sessionDir, "pano_reference.json"), json, new UTF8Encoding(false));
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"WritePanoReferenceJson failed: {e.Message}");
+        }
+    }
+
   //  public static bool PlayerFreeze = false;
     //[SerializeField] protected GameObject MainCamera = null;
     [SerializeField] protected GameObject VRCamera;

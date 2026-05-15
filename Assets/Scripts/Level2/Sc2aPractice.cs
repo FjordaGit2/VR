@@ -1,16 +1,18 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Networking;
 using TMPro;
 using Valve.VR;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement;
 
 public class Sc2aPractice : MonoBehaviour
 {
     [SerializeField] TextMeshPro text = null;
-    [SerializeField] float delay = 1.15f;
+
+    [Space]
+    [Header("Trial timing (same as Sc2aLectureHall)")]
+    [Min(1)] public int stimulusDurationMs = 100;
+    [Min(0)] public int postStimulusBlankMs = 1100;
     int count = 0;
     int currentNumber = 0;
     int countPress = 0;
@@ -152,12 +154,17 @@ public class Sc2aPractice : MonoBehaviour
             if (newNumber != currentNumber)
             {
                 currentNumber = newNumber;
-                text.text = currentNumber.ToString();
+                if (text != null)
+                    text.text = currentNumber.ToString();
 
-                yield return new WaitForSeconds(delay);
+                float stimSec = stimulusDurationMs * 0.001f;
+                float blankSec = postStimulusBlankMs * 0.001f;
+                yield return new WaitForSeconds(stimSec);
+                if (text != null)
+                    text.text = string.Empty;
+                yield return new WaitForSeconds(blankSec);
 
                 mylist.Remove(currentNumber);
-
             }
 
 
