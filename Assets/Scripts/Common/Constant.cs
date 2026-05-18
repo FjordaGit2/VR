@@ -1,5 +1,10 @@
 ﻿using System.Collections.Generic;
 
+/// <summary>
+/// Legacy API endpoint paths (fjordakazazi.com). Not used by the current study build:
+/// Levels 1–3 save under Assets/Data/ via File I/O (see LevelScript, Loginmanager, *Question, *LivingRoom, *LectureHall, SC3*Street).
+/// Kept only for reference; no script references this class.
+/// </summary>
 public class Constant
 {
     public const string DOMAIN = @"https://www.fjordakazazi.com/api/apifjm82/vrenvironments/";
