@@ -18,6 +18,8 @@ public class LevelScript : MonoBehaviour
     public const string DataFolderSc2LectureHall = "Sc2LectureHall";
     /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc2b behavioural data (inverted go/no-go vs Sc2a).</summary>
     public const string DataFolderSc2bLectureHall = "Sc2bLectureHall";
+    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc3a street car-detection task.</summary>
+    public const string DataFolderSc3aStreet = "Sc3aStreet";
 
     /// <summary>Assets/Data/{userGroup}/{levelSubfolder}/{userName} — same layout as Loginmanager creates for Sc1.</summary>
     public static string GetDataPathForLevel(string levelSubfolder, string userGroup, string userName)
