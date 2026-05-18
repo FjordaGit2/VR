@@ -39,36 +39,6 @@ EditorBuildSettings:
     path: Assets/Scenes/Sc3bQuestionnaire.unity
     guid: b5dd629424b2b5a4c80f9511ad7faa1b
   - enabled: 1
-    path: Assets/Scenes/Sc4Bar.unity
-    guid: 4dcd011aed3edb44dac2da56036670e0
-  - enabled: 1
-    path: Assets/Scenes/Sc4Questionnaire.unity
-    guid: 8babc9999c69072439e66b850ba35cac
-  - enabled: 1
-    path: Assets/Scenes/Sc5StreetPedestrian.unity
-    guid: 37a75829483a96943a1364c53dd9ee30
-  - enabled: 1
-    path: Assets/Scenes/Sc5Questionnaire.unity
-    guid: 259149709e2c81949833fbde31fcb49a
-  - enabled: 1
-    path: Assets/Scenes/Sc6TrainStation.unity
-    guid: aa359d50be7c9d54aa9d7ba9fd1aa8e4
-  - enabled: 1
-    path: Assets/Scenes/Sc6Questionnaire.unity
-    guid: 7b4e17fcdd695f64db352b12d5f557da
-  - enabled: 1
-    path: Assets/Scenes/Sc7Elevator.unity
-    guid: 5c7139932090e264ba7b4a16ce80a28c
-  - enabled: 1
-    path: Assets/Scenes/Sc7Questionnaire.unity
-    guid: b8520176fbcc86245a1dafdcf60eb279
-  - enabled: 1
-    path: Assets/Scenes/Sc8ChemistryLab.unity
-    guid: aad964513ff0275428468a98d659a2fa
-  - enabled: 1
-    path: Assets/Scenes/Sc8Questionnaire.unity
-    guid: 9954b35612102ca4f90f426df97b5cd3
-  - enabled: 1
     path: Assets/Scenes/End.unity
     guid: 8bc6c53e3d9fda444a71ecf5a415ebec
   m_configObjects:
