@@ -20,7 +20,6 @@ public class Sc2bPractice : MonoBehaviour
     bool praticeButtonIsClicked = false;
     public Canvas PracticeCanvas;
     public Text CanvasText;
-    public GameObject EEG;
     public GameObject Hand;
     public GameObject buttonStartPractice;
     public Camera camera;
@@ -158,11 +157,8 @@ public class Sc2bPractice : MonoBehaviour
 
     IEnumerator PracticeCompleted()
     {
-        CanvasText.text = "Practice completed. You will now start the calibration process.";
-        yield return new WaitForSeconds(5f);
-        EEG.SetActive(true);
-        this.gameObject.SetActive(false);
-        Hand.SetActive(false);
-        camera.clearFlags = CameraClearFlags.SolidColor;
+        if (CanvasText != null)
+            CanvasText.text = "Practice completed. You will now start the main task.";
+        yield return new WaitForSeconds(3f);
     }
 }

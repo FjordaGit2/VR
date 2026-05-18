@@ -220,8 +220,6 @@ public class Sc2aLectureHall : LevelScript
     {
         base.StartTask();
         StartCoroutine(ClearData("sc2_data"));
-        if (EEG.Instance != null)
-            EEG.Instance.Init("Sc2LectureHall");
 
         lookedbookcount = 0;
         lookedelsecount = 0;

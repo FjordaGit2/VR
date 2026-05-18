@@ -715,7 +715,6 @@ public class Sc1LivingRoom : LevelScript
     new public void StartTask()
     {
         base.StartTask();
-        // EEG.Instance.Init("Sc1LivingRoom");
         lookedtvcount = 0;
         lookedelsecount = 0;
         hasPreviousObservedState = false;

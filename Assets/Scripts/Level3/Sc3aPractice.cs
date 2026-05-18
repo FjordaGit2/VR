@@ -5,8 +5,7 @@ using Valve.VR;
 using UnityEngine.UI;
 
 /// <summary>
-/// Short practice block before Sc3aStreet. Same trial timing as SC3aStreet; no data saved.
-/// Pass when the participant presses the correct touchpad side at least twice per road (left and right).
+/// Short practice before SC3aStreet. Pass from touchpad only (same side as car). No eye-tracker check.
 /// </summary>
 public class Sc3aPractice : MonoBehaviour
 {
@@ -252,13 +251,7 @@ public class Sc3aPractice : MonoBehaviour
         if (PracticeCanvas != null)
             PracticeCanvas.enabled = true;
         if (CanvasText != null)
-            CanvasText.text = "Practice completed. You will now start the calibration process.";
-        yield return WaitMs(5000);
-        if (ThisGameObject != null)
-            ThisGameObject.SetActive(false);
-        if (Hand != null)
-            Hand.SetActive(false);
-        if (camera != null)
-            camera.clearFlags = CameraClearFlags.SolidColor;
+            CanvasText.text = "Practice completed. You will now start the main task.";
+        yield return WaitMs(3000);
     }
 }

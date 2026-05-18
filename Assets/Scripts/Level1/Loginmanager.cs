@@ -15,11 +15,13 @@ public class Loginmanager : MonoBehaviour
     [SerializeField] TMP_Dropdown DDGroup = null;
     [SerializeField] TMP_Dropdown DDVision = null;
     [SerializeField] TMP_Dropdown DDHearing = null;
+    [Tooltip("Scene order for this participant batch: options \"1 to 5\" and \"5 to 1\" (filled in code if empty).")]
+    [SerializeField] TMP_Dropdown DDSceneOrder = null;
     [SerializeField] Button BtSubmit = null;
     [SerializeField] TMP_Text ErrorMessage = null;
 
     private string UserId;
-    const string DemographicsHeader = "username,age,gender,highest_education,group,vision,hearing,platform,created_at";
+    const string DemographicsHeader = "username,age,gender,highest_education,group,vision,hearing,platform,scene_order,created_at";
 
     string _platform;
     public string Platform
@@ -34,7 +36,20 @@ public class Loginmanager : MonoBehaviour
         IFUserName.onValueChanged.AddListener(delegate { Validate(); });
         IFAge.onValueChanged.AddListener(delegate { Validate(); });
         BtSubmit.onClick.AddListener(delegate { StartCoroutine(Login()); });
+        EnsureSceneOrderDropdownOptions();
+    }
 
+    void EnsureSceneOrderDropdownOptions()
+    {
+        if (DDSceneOrder == null)
+            return;
+        DDSceneOrder.ClearOptions();
+        DDSceneOrder.AddOptions(new System.Collections.Generic.List<string>
+        {
+            StudySceneFlow.DropdownLabelForward,
+            StudySceneFlow.DropdownLabelReverse,
+        });
+        DDSceneOrder.value = 0;
     }
 
     public IEnumerator Login()
@@ -62,6 +77,10 @@ public class Loginmanager : MonoBehaviour
             rowBuilder.Append(EscapeCsv(DDVision.captionText.text)).Append(",");
             rowBuilder.Append(EscapeCsv(DDHearing.captionText.text)).Append(",");
             rowBuilder.Append(EscapeCsv(Platform)).Append(",");
+            string sceneOrder = DDSceneOrder != null
+                ? DDSceneOrder.options[DDSceneOrder.value].text
+                : StudySceneFlow.DropdownLabelForward;
+            rowBuilder.Append(EscapeCsv(sceneOrder)).Append(",");
             rowBuilder.AppendLine(System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
 
             if (!File.Exists(demographicsPath))
@@ -72,7 +91,11 @@ public class Loginmanager : MonoBehaviour
             LevelScript.UserGroup = group;
             LevelScript.IsVR = Platform == "VR";
 
-            LevelScript.NextScene();
+            if (DDSceneOrder != null)
+                StudySceneFlow.SetOrderFromDropdownIndex(DDSceneOrder.value);
+            else
+                StudySceneFlow.SetOrderFromDropdownLabel(sceneOrder);
+            StudySceneFlow.BeginStudyAfterLogin();
         }
         catch (System.Exception e)
         {

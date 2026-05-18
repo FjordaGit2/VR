@@ -20,6 +20,8 @@ public class LevelScript : MonoBehaviour
     public const string DataFolderSc2bLectureHall = "Sc2bLectureHall";
     /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc3a street car-detection task.</summary>
     public const string DataFolderSc3aStreet = "Sc3aStreet";
+    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc3b street task (opposite-side response).</summary>
+    public const string DataFolderSc3bStreet = "Sc3bStreet";
 
     /// <summary>Assets/Data/{userGroup}/{levelSubfolder}/{userName} — same layout as Loginmanager creates for Sc1.</summary>
     public static string GetDataPathForLevel(string levelSubfolder, string userGroup, string userName)
@@ -141,6 +143,12 @@ public class LevelScript : MonoBehaviour
     }
     public static void NextScene()
     {
+        if (StudySceneFlow.IsSequenceActive)
+        {
+            StudySceneFlow.AdvanceToNextScene();
+            return;
+        }
+
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
     }
 }

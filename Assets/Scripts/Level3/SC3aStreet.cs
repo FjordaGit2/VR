@@ -451,14 +451,23 @@ public class SC3aStreet : LevelScript
             string arrowPressed = _trialResponded
                 ? (_trialPressedLeft == true ? "Left" : "Right")
                 : "";
-            bool correct = _trialResponded && (_currentRoadSide == 0) == (_trialPressedLeft == true);
-            string accuracy = !_trialResponded ? "NoResponse" : (correct ? "Correct" : "Wrong");
+            string looked = string.IsNullOrEmpty(_trialLookedGaze)
+                ? SampleGazeRoadLabel()
+                : _trialLookedGaze;
+            string lookedAccuracy = ComputeLookedAccuracy(_currentRoadSide, looked);
+            bool touchpadCorrect = _trialResponded
+                && IsSameSideTouchpadResponse(_currentRoadSide, _trialPressedLeft == true);
+            bool gazeCorrect = lookedAccuracy == "Correct";
+            string accuracy;
+            if (!_trialResponded)
+                accuracy = "NoResponse";
+            else if (touchpadCorrect && gazeCorrect)
+                accuracy = "Correct";
+            else
+                accuracy = "Wrong";
             string rtCell = _trialResponded
                 ? _trialRtMs.ToString("0.###", CultureInfo.InvariantCulture)
                 : "NaN";
-            string looked = string.IsNullOrEmpty(_trialLookedGaze) && _trialResponded
-                ? SampleGazeRoadLabel()
-                : _trialLookedGaze;
 
             AppendTrialRow(
                 _trialIndex + 1,
@@ -469,7 +478,8 @@ public class SC3aStreet : LevelScript
                 arrowPressed,
                 accuracy,
                 rtCell,
-                looked);
+                looked,
+                lookedAccuracy);
 
             yield return WaitMs(interTrialIntervalMs);
         }
@@ -535,6 +545,24 @@ public class SC3aStreet : LevelScript
         return "";
     }
 
+    /// <summary>Sc3a: correct touchpad is same side as car (left car → left press).</summary>
+    static bool IsSameSideTouchpadResponse(int carRoadSide, bool pressedLeft)
+    {
+        return (carRoadSide == 0) == pressedLeft;
+    }
+
+    /// <summary>Sc3a: gaze on same road collider (Left/Right tag) as car side.</summary>
+    static string ComputeLookedAccuracy(int carRoadSide, string lookedLabel)
+    {
+        if (string.IsNullOrEmpty(lookedLabel))
+            return "NoGaze";
+        if (lookedLabel == "Else")
+            return "Else";
+        bool lookedLeft = lookedLabel == "Left";
+        bool sameSide = (carRoadSide == 0) == lookedLeft;
+        return sameSide ? "Correct" : "Wrong";
+    }
+
     void AppendTrialRow(
         int trialIndexOneBased,
         double unityCarOnset,
@@ -544,7 +572,8 @@ public class SC3aStreet : LevelScript
         string arrowPressed,
         string accuracy,
         string reactionTimeCell,
-        string looked)
+        string looked,
+        string lookedAccuracy)
     {
         string dir = recorder != null
             ? recorder.customPath
@@ -567,6 +596,7 @@ public class SC3aStreet : LevelScript
                     "accuracy," +
                     "reaction_time_ms," +
                     "looked," +
+                    "looked_accuracy," +
                     "created_at\n";
                 File.WriteAllText(_trialCsvPath, header, new UTF8Encoding(false));
             }
@@ -589,6 +619,7 @@ public class SC3aStreet : LevelScript
             CsvEscape(accuracy) + "," +
             reactionTimeCell + "," +
             CsvEscape(looked) + "," +
+            CsvEscape(lookedAccuracy) + "," +
             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "\n";
 
         File.AppendAllText(_trialCsvPath, row, new UTF8Encoding(false));
