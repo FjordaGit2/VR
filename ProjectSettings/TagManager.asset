@@ -40,6 +40,18 @@ TagManager:
   - Chimney
   - Kitchen
   - Lamp
+  - Globe
+  - Table
+  - Coffee
+  - Coke
+  - Ketchup
+  - FrenchFries
+  - Plant1
+  - Plant2
+  - Plant3
+  - Lamp1
+  - Lamp2
+  - Lamp3
   layers:
   - Default
   - TransparentFX
