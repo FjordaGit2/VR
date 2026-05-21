@@ -135,7 +135,6 @@ public class Sc1LivingRoom : LevelScript
 
                 ProcessGazeTick(sinceVideo, havePupilTs, pupilTs);
                 ProcessHeadMotionRow(sinceVideo, havePupilTs, pupilTs);
-                ProcessControllerHandRow(sinceVideo, havePupilTs, pupilTs, SteamVR_Input_Sources.LeftHand, "left");
                 ProcessControllerHandRow(sinceVideo, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand, "right");
                 MaybePeriodicFlushCsv();
             }

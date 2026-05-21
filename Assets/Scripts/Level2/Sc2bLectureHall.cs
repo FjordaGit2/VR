@@ -193,7 +193,6 @@ public class Sc2bLectureHall : LevelScript
 
                 ProcessGazeTick(sinceStart, havePupilTs, pupilTs);
                 ProcessHeadMotionRow(sinceStart, havePupilTs, pupilTs);
-                ProcessControllerHandRow(sinceStart, havePupilTs, pupilTs, SteamVR_Input_Sources.LeftHand, "left");
                 ProcessControllerHandRow(sinceStart, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand, "right");
                 MaybePeriodicFlushCsv();
             }

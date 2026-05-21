@@ -3729,7 +3729,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 537179700}
-        m_TargetAssemblyTypeName: Sc2Question, Assembly-CSharp
+        m_TargetAssemblyTypeName: Sc2aQuestion, Assembly-CSharp
         m_MethodName: set_Q1
         m_Mode: 5
         m_Arguments:
@@ -4452,7 +4452,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 537179700}
-        m_TargetAssemblyTypeName: Sc2Question, Assembly-CSharp
+        m_TargetAssemblyTypeName: Sc2aQuestion, Assembly-CSharp
         m_MethodName: Submit
         m_Mode: 1
         m_Arguments:
@@ -8927,7 +8927,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 537179700}
-        m_TargetAssemblyTypeName: Sc2Question, Assembly-CSharp
+        m_TargetAssemblyTypeName: Sc2aQuestion, Assembly-CSharp
         m_MethodName: set_Q1
         m_Mode: 5
         m_Arguments:
@@ -11808,7 +11808,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 537179700}
-        m_TargetAssemblyTypeName: Sc2Question, Assembly-CSharp
+        m_TargetAssemblyTypeName: Sc2aQuestion, Assembly-CSharp
         m_MethodName: set_Q1
         m_Mode: 5
         m_Arguments:
@@ -13594,7 +13594,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 537179700}
-        m_TargetAssemblyTypeName: Sc2Question, Assembly-CSharp
+        m_TargetAssemblyTypeName: Sc2aQuestion, Assembly-CSharp
         m_MethodName: set_Q1
         m_Mode: 5
         m_Arguments:
@@ -14428,7 +14428,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 537179700}
-        m_TargetAssemblyTypeName: Sc2Question, Assembly-CSharp
+        m_TargetAssemblyTypeName: Sc2aQuestion, Assembly-CSharp
         m_MethodName: set_Q1
         m_Mode: 5
         m_Arguments:

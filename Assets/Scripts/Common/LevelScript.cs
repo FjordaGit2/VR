@@ -23,6 +23,12 @@ public class LevelScript : MonoBehaviour
     /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc3b street task (opposite-side response).</summary>
     public const string DataFolderSc3bStreet = "Sc3bStreet";
 
+    public const string DataFolderSc1Questionnaire = "Sc1Questionnaire";
+    public const string DataFolderSc2aQuestionnaire = "Sc2aQuestionnaire";
+    public const string DataFolderSc2bQuestionnaire = "Sc2bQuestionnaire";
+    public const string DataFolderSc3aQuestionnaire = "Sc3aQuestionnaire";
+    public const string DataFolderSc3bQuestionnaire = "Sc3bQuestionnaire";
+
     /// <summary>Assets/Data/{userGroup}/{levelSubfolder}/{userName} — same layout as Loginmanager creates for Sc1.</summary>
     public static string GetDataPathForLevel(string levelSubfolder, string userGroup, string userName)
     {
@@ -44,6 +50,31 @@ public class LevelScript : MonoBehaviour
     public static string GetBehaviouralPath(string levelSubfolder)
     {
         return GetBehaviouralPath(levelSubfolder, UserGroup, UserName);
+    }
+
+    /// <summary>Questionnaire CSV folder: .../{levelSubfolder}/{userName}/Questionnaire</summary>
+    public static string GetQuestionnairePath(string levelSubfolder, string userGroup, string userName)
+    {
+        return $"{GetDataPathForLevel(levelSubfolder, userGroup, userName)}/Questionnaire";
+    }
+
+    public static string GetQuestionnairePath(string levelSubfolder)
+    {
+        return GetQuestionnairePath(levelSubfolder, UserGroup, UserName);
+    }
+
+    public static bool HasParticipantIdentity()
+    {
+        return !string.IsNullOrWhiteSpace(UserGroup) && !string.IsNullOrWhiteSpace(UserName);
+    }
+
+    public static string EscapeCsvField(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "";
+        if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
     }
 
     /// <summary>Stub JSON: fill <c>pano_export</c> after you render one reference equirect in Unity (pose + image size) for offline gaze_world → pixel mapping.</summary>
