@@ -33,7 +33,13 @@ public class Sc2aPractice : MonoBehaviour
     public SteamVR_Action_Boolean grabPinchAction = SteamVR_Input.GetAction<SteamVR_Action_Boolean>("GrabPinch");
     public GameObject Pointer;
 
-   
+    [Space]
+    [Header("Practice Completed")]
+    public GameObject GazeTracker;
+    public GameObject Recorder;
+    public GameObject RightHand;
+
+
 
 
     void Start()
@@ -206,6 +212,12 @@ public class Sc2aPractice : MonoBehaviour
     {
         if (CanvasText != null)
             CanvasText.text = "Practice completed. You will now start the main task.";
+        
         yield return new WaitForSeconds(3f);
+        this.gameObject.SetActive(false);
+        GazeTracker.SetActive(true);
+        Recorder.SetActive(true);
+        RightHand.SetActive(false);
+
     }
 }

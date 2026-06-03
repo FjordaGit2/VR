@@ -9,7 +9,6 @@ using UnityEngine.UI;
 /// </summary>
 public class Sc3aPractice : MonoBehaviour
 {
-    public GameObject ThisGameObject;
     public Button StartPracticeBTNl;
     public GameObject buttonStartPractice;
     bool praticeButtonIsClicked = false;
@@ -60,6 +59,12 @@ public class Sc3aPractice : MonoBehaviour
     public SteamVR_Input_Sources handType;
     public SteamVR_Action_Vector2 touchPadAction = SteamVR_Input.GetAction<SteamVR_Action_Vector2>("TouchpadLeftRight");
     public SteamVR_Action_Boolean touchPadClick = SteamVR_Input.GetAction<SteamVR_Action_Boolean>("TouchpadClick");
+
+    [Space]
+    [Header("Practice Completed")]
+    public GameObject GazeTracker;
+    public GameObject Recorder;
+    public GameObject RightHand;
 
     void Start()
     {
@@ -253,5 +258,11 @@ public class Sc3aPractice : MonoBehaviour
         if (CanvasText != null)
             CanvasText.text = "Practice completed. You will now start the main task.";
         yield return WaitMs(3000);
+
+        this.gameObject.SetActive(false);
+        GazeTracker.SetActive(true);
+        Recorder.SetActive(true);
+        RightHand.SetActive(false);
+        camera.clearFlags = CameraClearFlags.SolidColor;
     }
 }

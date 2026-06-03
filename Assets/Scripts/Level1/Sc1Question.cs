@@ -30,6 +30,7 @@ public class Sc1Question : MonoBehaviour
 
     void Validate()
     {
+
         if (BtSubmit != null)
             BtSubmit.interactable = _q1 != "" && _q2 != "" && _q3 != "" && _q4 != "";
     }

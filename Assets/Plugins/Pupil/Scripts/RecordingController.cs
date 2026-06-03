@@ -1,11 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Networking;
-using UnityEngine.UI;
-using System.IO;
-
-
 
 namespace PupilLabs
 {
@@ -15,7 +10,7 @@ namespace PupilLabs
         public RequestController requestCtrl;
 
         [Header("Recording Path")]
-        public bool useCustomPath = true;
+        public bool useCustomPath;
         public string customPath;
 
         [Header("Controls")]
@@ -24,7 +19,7 @@ namespace PupilLabs
         [SerializeField] private bool stopRecording;
 
         public bool IsRecording { get; private set; }
-        
+
         void OnEnable()
         {
             if (requestCtrl == null)
@@ -140,7 +135,6 @@ namespace PupilLabs
             }
             else
             {
-                
                 string date = System.DateTime.Now.ToString("yyyy_MM_dd");
                 path = $"{Application.dataPath}/{date}";
                 path = path.Replace("Assets/", ""); //go one folder up

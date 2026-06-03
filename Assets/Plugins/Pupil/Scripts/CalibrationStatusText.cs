@@ -10,18 +10,13 @@ namespace PupilLabs
     {
         public SubscriptionsController subsCtrl;
         public Text statusText;
-        public GameObject status;
 
         private CalibrationController calibrationController;
-
-        public GameObject Scene;
-        public GameObject Hand;
 
         void Awake()
         {
             SetStatusText("Not connected");
             calibrationController = GetComponent<CalibrationController>();
-            Hand.SetActive(false);
         }
 
         void OnEnable()
@@ -45,7 +40,7 @@ namespace PupilLabs
         private void OnConnected()
         {
             string text = "Connected";
-            text += "\n\nCalibration will start soon. Once started, please follow the circles only with your eyes without moving your head.";
+            text += "\n\nCalibration will start soon. Once started, please follow the targets shown only with your eyes without moving your head.";
             SetStatusText(text);
         }
 
@@ -57,12 +52,8 @@ namespace PupilLabs
         private void OnCalibrationRoutineDone()
         {
             statusText.enabled = true;
-            SetStatusText("Calibration is done.");
-
-          
+            SetStatusText("Calibration routine is done. Waiting for results ...");
         }
-        
-        
 
         private void CalibrationSucceeded()
         {
@@ -70,9 +61,8 @@ namespace PupilLabs
             SetStatusText("Calibration succeeded.");
 
             StartCoroutine(DisableTextAfter(1));
-            Scene.SetActive(true); //I make it active here. Used to work
-            Hand.SetActive(true);
-            status.SetActive(false);
+
+
         }
 
         private void CalibrationFailed()

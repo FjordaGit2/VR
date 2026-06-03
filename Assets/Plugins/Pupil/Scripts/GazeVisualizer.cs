@@ -11,7 +11,7 @@ namespace PupilLabs
 
         [Header("Settings")]
         [Range(0f, 1f)]
-        public float confidenceThreshold = 0.65f;
+        public float confidenceThreshold = 0.6f;
         public bool binocularOnly = true;
 
         [Header("Projected Visualization")]
@@ -180,7 +180,6 @@ namespace PupilLabs
 
                 gazeDirectionMarker.position = origin + direction * hit.distance;
                 gazeDirectionMarker.LookAt(origin);
-
 
                 if (errorAngleBasedMarkerRadius)
                 {

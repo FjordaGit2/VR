@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-
-
 namespace PupilLabs
 {
     public class CalibrationController : MonoBehaviour
@@ -44,9 +42,18 @@ namespace PupilLabs
 
         bool previewMarkersActive = false;
 
-        public Text statusText;
-        int connected = 0;
-        int calibSucceded = 0;
+        [Header("After Calibration")]
+        public GameObject VREnvironment;
+        public GameObject StatusText;
+        public GameObject RightHand;
+
+        void Start()
+        {
+            StartCoroutine(AutoStartCalibration());
+        }
+
+
+
 
         void OnEnable()
         {
@@ -117,43 +124,16 @@ namespace PupilLabs
                 UpdateCalibration();
             }
 
-            if (statusText.text == "Connected\n\nCalibration will start soon. Once started, please follow the circles only with your eyes without moving your head.")
-            {
-                StartCoroutine(CalibrationIEnum());
-            }
-            if (connected == 1)
+            if (Input.GetKeyUp(KeyCode.C))
             {
                 ToggleCalibration();
             }
-
-           
-
-           // if (statusText.text == "Calibration succeeded.")
-           // {
-           //     StartCoroutine(DisableTheTextOnCalib());
-            //}
-            //if (calibSucceded == 1)
-            //{
-           //     statusText.enabled = false;
-           // }
-            if (Input.GetKeyUp(KeyCode.C))
+            else if (Input.GetKeyDown(KeyCode.P))
             {
-              ToggleCalibration();
+                showPreview = !showPreview;
             }
-            // if (Input.GetKeyDown(KeyCode.P))
-            //{
-            //  showPreview = !showPreview;
-            //}
-
         }
 
-        IEnumerator CalibrationIEnum()
-        {
-            yield return new WaitForSeconds(10);
-            connected++;
-            
-        }
-        
         public void ToggleCalibration()
         {
             if (calibration.IsCalibrating)
@@ -164,6 +144,18 @@ namespace PupilLabs
             {
                 StartCalibration();
             }
+        }
+
+        private IEnumerator AutoStartCalibration()
+        {
+            while (!subsCtrl.IsConnected)
+            {
+                yield return null;
+            }
+
+            yield return new WaitForSeconds(5f);
+
+            StartCalibration();
         }
 
         public void StartCalibration()
@@ -269,10 +261,18 @@ namespace PupilLabs
 
         private void CalibrationSucceeded()
         {
+            if (VREnvironment != null)
+            {
+                VREnvironment.SetActive(true);
+                StatusText.SetActive(false);
+                RightHand.SetActive(true);
+                camera.clearFlags = CameraClearFlags.Skybox;
+
+            }
+
             if (OnCalibrationSucceeded != null)
             {
                 OnCalibrationSucceeded();
-                
             }
         }
 
@@ -281,10 +281,6 @@ namespace PupilLabs
             if (OnCalibrationFailed != null)
             {
                 OnCalibrationFailed();
-                if (Input.GetKeyUp(KeyCode.C))
-                {
-                    ToggleCalibration();
-                }
             }
         }
 
