@@ -21,6 +21,15 @@ public static class StudySceneFlow
     public const string DropdownLabelForward = "1 to 5";
     public const string DropdownLabelReverse = "5 to 1";
 
+    /// <summary>Master switch for experimenter debug skip UI (monitor only — not rendered in the VR headset).</summary>
+    public static bool EnableDebugSkipButton = true;
+
+    /// <summary>Experimenter monitor / editor controls — independent of whether the participant is in VR.</summary>
+    public static bool ShouldShowPcDebugOverlay()
+    {
+        return EnableDebugSkipButton;
+    }
+
     /// <summary>Per-level scenes after ID (practice is in-scene, not listed here).</summary>
     static readonly string[][] LevelBlocks =
     {
@@ -38,6 +47,7 @@ public static class StudySceneFlow
     static bool _sequenceActive;
 
     public static bool IsSequenceActive => _sequenceActive;
+    public static int StepIndex => _stepIndex;
     public static StudySceneOrder Order { get; private set; } = StudySceneOrder.Forward_1_to_5;
 
     public enum StudySceneOrder
@@ -50,6 +60,18 @@ public static class StudySceneFlow
     {
         MiddleScenesForward = FlattenBlocks(LevelBlocks);
         MiddleScenesReverse = FlattenBlocks(ReverseBlockOrder(LevelBlocks));
+    }
+
+    static bool _sceneSyncHookRegistered;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void RegisterSceneStepSync()
+    {
+        if (_sceneSyncHookRegistered)
+            return;
+        _sceneSyncHookRegistered = true;
+        SceneManager.sceneLoaded += (_, __) => SyncStepIndexToActiveScene();
+        SyncStepIndexToActiveScene();
     }
 
     static string[][] ReverseBlockOrder(string[][] blocks)
@@ -107,6 +129,7 @@ public static class StudySceneFlow
             : MiddleScenesForward;
     }
 
+    /// <summary>After ID login: start first middle scene (not ID).</summary>
     public static void BeginStudyAfterLogin()
     {
         _sequenceActive = true;
@@ -114,33 +137,97 @@ public static class StudySceneFlow
         LoadStep(_stepIndex);
     }
 
-    public static void AdvanceToNextScene()
+    /// <summary>For PC testing: start counterbalanced flow at the currently open scene.</summary>
+    public static void BeginSequenceAtCurrentScene(StudySceneOrder order)
+    {
+        Order = order;
+        _sequenceActive = true;
+        if (!SyncStepIndexToActiveScene())
+        {
+            Debug.LogWarning("StudySceneFlow: current scene is not in the study sequence; starting at step 0.");
+            _stepIndex = 0;
+        }
+        Debug.Log($"StudySceneFlow: testing mode — order {GetOrderLabel()}, step {_stepIndex + 1}/{GetMiddleScenes().Count}, scene '{SceneManager.GetActiveScene().name}'.");
+    }
+
+    /// <summary>Keep step index aligned with the loaded scene (guards against duplicate NextScene calls).</summary>
+    public static bool SyncStepIndexToActiveScene()
+    {
+        if (!_sequenceActive)
+            return false;
+
+        string active = SceneManager.GetActiveScene().name;
+        if (active == SceneId || active == SceneEnd)
+            return false;
+
+        IReadOnlyList<string> middle = GetMiddleScenes();
+        for (int i = 0; i < middle.Count; i++)
+        {
+            if (string.Equals(middle[i], active, StringComparison.Ordinal))
+            {
+                _stepIndex = i;
+                return true;
+            }
+        }
+
+        Debug.LogWarning($"StudySceneFlow: scene '{active}' is not in order '{GetOrderLabel()}'.");
+        return false;
+    }
+
+    public static string GetNextSceneNamePreview()
+    {
+        if (!_sequenceActive)
+            return "(sequence inactive — build index + 1)";
+
+        int next = _stepIndex + 1;
+        IReadOnlyList<string> middle = GetMiddleScenes();
+        if (next >= middle.Count)
+            return SceneEnd;
+        return middle[next];
+    }
+
+    public static string GetDebugStatusLine()
+    {
+        string active = SceneManager.GetActiveScene().name;
+        if (!_sequenceActive)
+            return $"Flow: OFF | Scene: {active} | Next: build+1";
+
+        IReadOnlyList<string> middle = GetMiddleScenes();
+        int stepNum = _stepIndex >= 0 ? _stepIndex + 1 : 0;
+        return $"Order: {GetOrderLabel()} | Step {stepNum}/{middle.Count} | {active} | Next: {GetNextSceneNamePreview()}";
+    }
+
+    /// <returns>False if the next scene could not be loaded (advance lock should be released).</returns>
+    public static bool AdvanceToNextScene()
     {
         if (!_sequenceActive)
         {
             Debug.LogWarning("StudySceneFlow: sequence not started; using build-order NextScene fallback.");
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex + 1);
-            return;
+            return true;
         }
+
+        SyncStepIndexToActiveScene();
 
         _stepIndex++;
         if (_stepIndex >= GetMiddleScenes().Count)
         {
             _sequenceActive = false;
+            Debug.Log($"StudySceneFlow: study complete — loading '{SceneEnd}'.");
             SceneManager.LoadScene(SceneEnd);
-            return;
+            return true;
         }
 
-        LoadStep(_stepIndex);
+        return LoadStep(_stepIndex);
     }
 
-    static void LoadStep(int middleIndex)
+    static bool LoadStep(int middleIndex)
     {
         IReadOnlyList<string> middle = GetMiddleScenes();
         if (middleIndex < 0 || middleIndex >= middle.Count)
         {
             Debug.LogError($"StudySceneFlow: invalid step {middleIndex}.");
-            return;
+            return false;
         }
 
         string sceneName = middle[middleIndex];
@@ -149,11 +236,12 @@ public static class StudySceneFlow
             Debug.LogError(
                 $"StudySceneFlow: scene '{sceneName}' is not in Build Settings. " +
                 "Add it under File → Build Settings → Scenes In Build.");
-            return;
+            return false;
         }
 
-        Debug.Log($"StudySceneFlow: loading '{sceneName}' (order {GetOrderLabel()}, step {middleIndex + 1}/{middle.Count}).");
+        Debug.Log($"StudySceneFlow: loading '{sceneName}' (order {GetOrderLabel()}, step {middleIndex + 1}/{middle.Count}). Next after that: {GetNextSceneNamePreview()}");
         SceneManager.LoadScene(sceneName);
+        return true;
     }
 
     public static string GetCurrentSceneNameForLog()

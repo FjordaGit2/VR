@@ -17,6 +17,7 @@ public class Sc3bQuestion : MonoBehaviour
     string _q6 = "";
 
     const string AnswersHeader = "username,q1,q2,q3,q4,q5,q6,created_at";
+    bool _submitting;
 
     public string Q1 { set { _q1 = value; Validate(); } }
     public string Q2 { set { _q2 = value; Validate(); } }
@@ -28,7 +29,10 @@ public class Sc3bQuestion : MonoBehaviour
     void Start()
     {
         if (BtSubmit != null)
+        {
+            BtSubmit.onClick.RemoveAllListeners();
             BtSubmit.onClick.AddListener(Submit);
+        }
         Validate();
     }
 
@@ -40,17 +44,24 @@ public class Sc3bQuestion : MonoBehaviour
 
     public void Submit()
     {
+        if (_submitting)
+            return;
         StartCoroutine(SaveAnswersLocally());
     }
 
     IEnumerator SaveAnswersLocally()
     {
+        if (_submitting)
+            yield break;
+        _submitting = true;
+
         if (BtSubmit != null)
             BtSubmit.interactable = false;
 
         if (!LevelScript.HasParticipantIdentity())
         {
             Debug.LogError("Sc3bQuestion: UserGroup/UserName are empty. Log in from the ID scene first.");
+            _submitting = false;
             if (BtSubmit != null)
                 BtSubmit.interactable = true;
             yield break;
@@ -82,6 +93,7 @@ public class Sc3bQuestion : MonoBehaviour
         catch (System.Exception e)
         {
             Debug.LogError($"Sc3bQuestion local save failed: {e.Message}");
+            _submitting = false;
             if (BtSubmit != null)
                 BtSubmit.interactable = true;
         }

@@ -172,11 +172,34 @@ public class LevelScript : MonoBehaviour
     {
         SceneManager.LoadScene(sceneIndex);
     }
+
+    static bool _sceneAdvanceLocked;
+    static bool _sceneAdvanceHookRegistered;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void RegisterSceneAdvanceUnlock()
+    {
+        if (_sceneAdvanceHookRegistered)
+            return;
+        _sceneAdvanceHookRegistered = true;
+        SceneManager.sceneLoaded += (_, __) => _sceneAdvanceLocked = false;
+        _sceneAdvanceLocked = false;
+    }
+
     public static void NextScene()
     {
+        if (_sceneAdvanceLocked)
+        {
+            Debug.LogWarning("LevelScript.NextScene ignored — scene advance already in progress.");
+            return;
+        }
+
+        _sceneAdvanceLocked = true;
+
         if (StudySceneFlow.IsSequenceActive)
         {
-            StudySceneFlow.AdvanceToNextScene();
+            if (!StudySceneFlow.AdvanceToNextScene())
+                _sceneAdvanceLocked = false;
             return;
         }
 
