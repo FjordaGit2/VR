@@ -12,15 +12,16 @@ public class LevelScript : MonoBehaviour
     public static string UserGroup;
     public static bool IsVR;
 
-    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc1 behavioural data (matches Loginmanager).</summary>
+    public const string DataRootFolderName = "Data";
+    public const string BehaviouralStreamFolder = "Behavioural";
+    public const string EyeTrackingStreamFolder = "EyeTracking";
+    public const string QuestionnaireStreamFolder = "Questionnaire";
+
+    /// <summary>Task scene folder names (scene order does not affect paths).</summary>
     public const string DataFolderSc1LivingRoom = "Sc1LivingRoom";
-    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc2a behavioural data.</summary>
     public const string DataFolderSc2LectureHall = "Sc2LectureHall";
-    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc2b behavioural data (inverted go/no-go vs Sc2a).</summary>
     public const string DataFolderSc2bLectureHall = "Sc2bLectureHall";
-    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc3a street car-detection task.</summary>
     public const string DataFolderSc3aStreet = "Sc3aStreet";
-    /// <summary>Folder name under Assets/Data/{UserGroup}/ for Sc3b street task (opposite-side response).</summary>
     public const string DataFolderSc3bStreet = "Sc3bStreet";
 
     public const string DataFolderSc1Questionnaire = "Sc1Questionnaire";
@@ -29,38 +30,46 @@ public class LevelScript : MonoBehaviour
     public const string DataFolderSc3aQuestionnaire = "Sc3aQuestionnaire";
     public const string DataFolderSc3bQuestionnaire = "Sc3bQuestionnaire";
 
-    /// <summary>Assets/Data/{userGroup}/{levelSubfolder}/{userName} — same layout as Loginmanager creates for Sc1.</summary>
-    public static string GetDataPathForLevel(string levelSubfolder, string userGroup, string userName)
+    public const string QuestionnaireFileSc1 = "Sc1Questionnaire.csv";
+    public const string QuestionnaireFileSc2a = "Sc2aQuestionnaire.csv";
+    public const string QuestionnaireFileSc2b = "Sc2bQuestionnaire.csv";
+    public const string QuestionnaireFileSc3a = "Sc3aQuestionnaire.csv";
+    public const string QuestionnaireFileSc3b = "Sc3bQuestionnaire.csv";
+
+    public static string GetDataRootPath()
     {
-        return $"{Application.dataPath}/Data/{userGroup}/{levelSubfolder}/{userName}";
+        return $"{Application.dataPath}/{DataRootFolderName}";
     }
 
-    /// <summary>Assets/Data/{UserGroup}/{levelSubfolder}/{UserName} after login.</summary>
-    public static string GetDataPathForLevel(string levelSubfolder)
+    /// <summary>Assets/Data/{stream}/{sceneFolder}/{userGroup}/{userName}</summary>
+    public static string GetParticipantStreamPath(string streamFolder, string sceneFolder, string userGroup, string userName)
     {
-        return GetDataPathForLevel(levelSubfolder, UserGroup, UserName);
+        return $"{GetDataRootPath()}/{streamFolder}/{sceneFolder}/{userGroup}/{userName}";
     }
 
-    /// <summary>Pupil + CSV session folder: .../{levelSubfolder}/{userName}/Behavioural</summary>
-    public static string GetBehaviouralPath(string levelSubfolder, string userGroup, string userName)
+    public static string GetBehaviouralPath(string sceneFolder, string userGroup, string userName)
     {
-        return $"{GetDataPathForLevel(levelSubfolder, userGroup, userName)}/Behavioural";
+        return GetParticipantStreamPath(BehaviouralStreamFolder, sceneFolder, userGroup, userName);
     }
 
-    public static string GetBehaviouralPath(string levelSubfolder)
+    public static string GetBehaviouralPath(string sceneFolder)
     {
-        return GetBehaviouralPath(levelSubfolder, UserGroup, UserName);
+        return GetBehaviouralPath(sceneFolder, UserGroup, UserName);
     }
 
-    /// <summary>Questionnaire CSV folder: .../{levelSubfolder}/{userName}/Questionnaire</summary>
-    public static string GetQuestionnairePath(string levelSubfolder, string userGroup, string userName)
+    public static string GetEyeTrackingPath(string sceneFolder, string userGroup, string userName)
     {
-        return $"{GetDataPathForLevel(levelSubfolder, userGroup, userName)}/Questionnaire";
+        return GetParticipantStreamPath(EyeTrackingStreamFolder, sceneFolder, userGroup, userName);
     }
 
-    public static string GetQuestionnairePath(string levelSubfolder)
+    public static string GetEyeTrackingPath(string sceneFolder)
     {
-        return GetQuestionnairePath(levelSubfolder, UserGroup, UserName);
+        return GetEyeTrackingPath(sceneFolder, UserGroup, UserName);
+    }
+
+    public static string GetQuestionnaireDirectory()
+    {
+        return $"{GetDataRootPath()}/{QuestionnaireStreamFolder}";
     }
 
     public static bool HasParticipantIdentity()
@@ -110,6 +119,36 @@ public class LevelScript : MonoBehaviour
     public bool isStarted = false;
     public bool btnIsClicked = false;
     bool TaskLevel = true;
+    bool _studyTaskStartConsumed;
+    protected bool sceneReferenceJsonWritten;
+
+    /// <summary>Call from Update once per scene: handles start button without re-entering every frame.</summary>
+    protected bool ConsumeStartButtonForTask()
+    {
+        if (_studyTaskStartConsumed || !btnIsClicked || isStarted)
+            return false;
+        _studyTaskStartConsumed = true;
+        btnIsClicked = false;
+        return true;
+    }
+
+    /// <summary>Writes scene ROI / pano JSON once per scene load (avoids repeated disk writes).</summary>
+    protected void WriteSceneReferenceJsonOnce(string sessionDir, Action writeAction)
+    {
+        if (sceneReferenceJsonWritten || writeAction == null)
+            return;
+        sceneReferenceJsonWritten = true;
+        try
+        {
+            Directory.CreateDirectory(sessionDir);
+            writeAction();
+        }
+        catch (Exception e)
+        {
+            sceneReferenceJsonWritten = false;
+            Debug.LogWarning($"WriteSceneReferenceJsonOnce failed: {e.Message}");
+        }
+    }
     void Start()
     {
         StartBTN.onClick.AddListener(buttonIsClicked);
@@ -141,22 +180,9 @@ public class LevelScript : MonoBehaviour
         AudioListener.volume = 1;
         Time.timeScale = 1;
     }
+    [Obsolete("Legacy scene flow only; study scenes use StudySceneFlow and no longer write level_progress.csv.")]
     public static IEnumerator SetLevel(SceneType sceneType)
     {
-        try
-        {
-            string dataDir = $"{Application.dataPath}/Data";
-            Directory.CreateDirectory(dataDir);
-            string levelPath = $"{dataDir}/level_progress.csv";
-            if (!File.Exists(levelPath))
-                File.WriteAllText(levelPath, "username,group,level,created_at\n", new UTF8Encoding(false));
-            File.AppendAllText(levelPath, $"{UserName},{UserGroup},{sceneType},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n", new UTF8Encoding(false));
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning($"SetLevel local save failed: {e.Message}");
-        }
-
         yield break;
     }
     public static IEnumerator ClearData(string table)

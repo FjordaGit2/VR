@@ -19,8 +19,6 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public class Sc2bLectureHall : LevelScript
 {
-    const string OutcomeColumnName = "outcome_Hit1_Miss2_FalseAlarm3_CorrectRejection4";
-
     [SerializeField] TextMeshPro text = null;
     public Camera camera;
 
@@ -118,16 +116,12 @@ public class Sc2bLectureHall : LevelScript
 
     GazeData _lastGaze;
     bool _trialWindowActive;
-    /// <summary>Stimulus onset in Unity game time (<see cref="Time.time"/>), same clock as Sc1LivingRoom CSV column unity_time_s.</summary>
+    /// <summary>Stimulus onset in Unity game time (<see cref="Time.time"/>), same clock as Sc1LivingRoom CSV column unity_time_ms.</summary>
     float _trialOnsetUnityTime;
     bool _trialResponded;
     float _trialRtMs;
     string _trialCsvPath;
     bool _trialCsvHeaderWritten;
-    string _gazeSessionId;
-    string _gazeCsvParticipantGroup;
-    string _gazeCsvParticipantId;
-
     void Awake()
     {
         if (camera != null)
@@ -137,7 +131,7 @@ public class Sc2bLectureHall : LevelScript
 
         if (recorder != null)
         {
-            recorder.customPath = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
+            recorder.customPath = LevelScript.GetEyeTrackingPath(LevelScript.DataFolderSc2bLectureHall);
             if (recorder.requestCtrl != null)
                 _ = recorder.requestCtrl.IsConnected;
         }
@@ -172,7 +166,7 @@ public class Sc2bLectureHall : LevelScript
 
     void Update()
     {
-        if (btnIsClicked && !isStarted)
+        if (ConsumeStartButtonForTask())
         {
             StartTask();
             if (recorder != null)
@@ -193,7 +187,7 @@ public class Sc2bLectureHall : LevelScript
 
                 ProcessGazeTick(sinceStart, havePupilTs, pupilTs);
                 ProcessHeadMotionRow(sinceStart, havePupilTs, pupilTs);
-                ProcessControllerHandRow(sinceStart, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand, "right");
+                ProcessControllerHandRow(sinceStart, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand);
                 MaybePeriodicFlushCsv();
             }
         }
@@ -215,6 +209,8 @@ public class Sc2bLectureHall : LevelScript
 
     public new void StartTask()
     {
+        if (_csvSessionLogging)
+            return;
         base.StartTask();
         StartCoroutine(ClearData("sc2b_data"));
 
@@ -235,7 +231,7 @@ public class Sc2bLectureHall : LevelScript
 
         OpenSessionCsvWriters();
         if (gazeOriginCamera != null)
-            WriteSceneReferenceJsonFiles(recorder != null ? recorder.customPath : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall));
+            WriteSceneReferenceJsonFiles(LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall));
         _csvSessionLogging = true;
 
         StartCoroutine(RunTaskCoroutine());
@@ -426,10 +422,13 @@ public class Sc2bLectureHall : LevelScript
                 text.text = string.Empty;
 
             int responseFlag = _trialResponded ? 1 : 0;
-            int outcomeCode = ComputeOutcomeCode(goTrialFlag, responseFlag);
+            int outcomeCode = StudyTaskTrialsLog.ComputeOutcomeCode(goTrialFlag, responseFlag);
+            int accuracyCode = ComputeTrialAccuracyCode(goTrialFlag, responseFlag);
             string rtCell = _trialResponded ? _trialRtMs.ToString("0.###", CultureInfo.InvariantCulture) : "NaN";
+            float sinceTaskStartSec = _trialOnsetUnityTime - _sessionLogStartUnityTime;
 
             AppendTrialRow(
+                sinceTaskStartSec,
                 trialIndex + 1,
                 unityOnset,
                 pupilOnset,
@@ -437,6 +436,7 @@ public class Sc2bLectureHall : LevelScript
                 goTrialFlag,
                 responseFlag,
                 outcomeCode,
+                accuracyCode,
                 rtCell);
 
             switch (outcomeCode)
@@ -454,22 +454,19 @@ public class Sc2bLectureHall : LevelScript
 
         if (recorder != null)
             recorder.StopRecording();
-        StartCoroutine(SetLevel(SceneType.Sc2bQuestionnaire));
         if (postBlockDelayBeforeNextSceneSeconds > 0f)
             yield return new WaitForSeconds(postBlockDelayBeforeNextSceneSeconds);
         NextScene();
     }
 
-    /// <param name="targetFlag">1 = press for hit; 0 = withhold for correct rejection (Sc2a: digit 3 shown; Sc2b: no-go digit shown).</param>
-    static int ComputeOutcomeCode(int targetFlag, int responseFlag)
+    /// <summary>1 correct (hit or correct rejection), 0 wrong (false alarm), 2 no response (miss).</summary>
+    static int ComputeTrialAccuracyCode(int targetFlag, int responseFlag)
     {
-        if (targetFlag == 1 && responseFlag == 1)
-            return 1;
-        if (targetFlag == 1 && responseFlag == 0)
+        if (responseFlag == 0 && targetFlag == 1)
             return 2;
-        if (targetFlag == 0 && responseFlag == 1)
-            return 3;
-        return 4;
+        if (responseFlag == 0)
+            return 1;
+        return targetFlag == 1 ? 1 : 0;
     }
 
     void ProcessGazeTick(float sinceStart, bool havePupilTs, double pupilTs)
@@ -622,11 +619,10 @@ public class Sc2bLectureHall : LevelScript
                 angCol = F(Vector3.Angle(cam.forward, toBook.normalized));
         }
 
-        string pCol = havePupilTs ? F(pupilTs) : "";
         headWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             F(p.x), F(p.y), F(p.z),
             F(euler.x), F(euler.y), F(euler.z),
             F(fwd.x), F(fwd.y), F(fwd.z),
@@ -653,7 +649,7 @@ public class Sc2bLectureHall : LevelScript
         _headKinTickCount++;
     }
 
-    void ProcessControllerHandRow(float sinceStart, bool havePupilTs, double pupilTs, SteamVR_Input_Sources hand, string handLabel)
+    void ProcessControllerHandRow(float sinceStart, bool havePupilTs, double pupilTs, SteamVR_Input_Sources hand)
     {
         if (controllerWriter == null)
             return;
@@ -697,61 +693,17 @@ public class Sc2bLectureHall : LevelScript
             vAng = av.magnitude;
         }
 
-        int triggerPressed = 0;
-        int gripPressed = 0;
-        if (SteamVR.initializedState == SteamVR.InitializedStates.InitializeSuccess)
-        {
-            var squeeze = SteamVR_Actions.default_Squeeze;
-            if (squeeze != null && squeeze.activeBinding)
-                triggerPressed = squeeze.GetAxis(hand) >= triggerPressThreshold ? 1 : 0;
-            var grip = SteamVR_Actions.default_GrabGrip;
-            if (grip != null && grip.activeBinding)
-                gripPressed = grip.GetState(hand) ? 1 : 0;
-        }
+        var buttons = ControllerTimeseriesLog.Capture(hand, triggerPressThreshold);
 
-        string buttonEvents = BuildControllerButtonEvents(hand);
-
-        string pCol = havePupilTs ? F(pupilTs) : "";
         controllerWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
-            CsvEscape(handLabel),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             F(p.x), F(p.y), F(p.z),
             F(euler.x), F(euler.y), F(euler.z),
             F(vLin),
             F(vAng),
-            triggerPressed.ToString(CultureInfo.InvariantCulture),
-            gripPressed.ToString(CultureInfo.InvariantCulture),
-            CsvEscape(buttonEvents)));
-    }
-
-    static string BuildControllerButtonEvents(SteamVR_Input_Sources hand)
-    {
-        if (SteamVR.initializedState != SteamVR.InitializedStates.InitializeSuccess)
-            return "";
-
-        var sb = new StringBuilder(64);
-        AppendBoolEdges(sb, SteamVR_Actions.default_GrabPinch, hand, "grab_pinch");
-        AppendBoolEdges(sb, SteamVR_Actions.default_GrabGrip, hand, "grab_grip");
-        AppendBoolEdges(sb, SteamVR_Actions.default_InteractUI, hand, "interact_ui");
-        AppendBoolEdges(sb, SteamVR_Actions.default_Teleport, hand, "teleport");
-        AppendBoolEdges(sb, SteamVR_Actions.default_TouchpadClick, hand, "touchpad_click");
-        AppendBoolEdges(sb, SteamVR_Actions.default_SnapTurnLeft, hand, "snap_turn_left");
-        AppendBoolEdges(sb, SteamVR_Actions.default_SnapTurnRight, hand, "snap_turn_right");
-        if (sb.Length > 0 && sb[sb.Length - 1] == ';')
-            sb.Length -= 1;
-        return sb.ToString();
-    }
-
-    static void AppendBoolEdges(StringBuilder sb, SteamVR_Action_Boolean action, SteamVR_Input_Sources hand, string id)
-    {
-        if (action == null || !action.activeBinding)
-            return;
-        if (action.GetStateDown(hand))
-            sb.Append(id).Append("_down;");
-        if (action.GetStateUp(hand))
-            sb.Append(id).Append("_up;");
+            ControllerTimeseriesLog.FormatButtonColumns(buttons)));
     }
 
     static Transform GetTrackingRigOrigin()
@@ -785,14 +737,14 @@ public class Sc2bLectureHall : LevelScript
 
     void WriteSceneReferenceJsonFiles(string sessionDir)
     {
-        try
+        WriteSceneReferenceJsonOnce(sessionDir, () =>
         {
             var scene = SceneManager.GetActiveScene();
             var sb = new StringBuilder(1024);
             sb.Append('{');
             sb.Append("\"schema\":\"sc2b_scene_rois v1\",");
             sb.Append("\"unity_scene_name\":").Append(JsonString(scene.name)).Append(',');
-            sb.Append("\"unity_time_at_snapshot\":").Append(F(Time.time)).Append(',');
+            sb.Append("\"unity_time_ms_at_snapshot\":").Append(StudyCsvTime.FormatSecondsAsMs(Time.time)).Append(',');
             sb.Append("\"equirect_heatmap_columns\":").Append(JsonString("gaze_hmd_local_x,y,z (HMD +Z forward +Y up); yaw_deg; pitch_deg; equirect_u,v zenith-top pano; see VrGazeEquirectMetrics")).Append(',');
             AppendTransformBlock(sb, "book", GetBookTransformForSnapshot());
             sb.Append(',');
@@ -806,11 +758,7 @@ public class Sc2bLectureHall : LevelScript
             const string roiBookTemplate = "{\"roi_name\":\"Book\",\"type\":\"polygon\",\"points\":[],\"note\":\"Normalized panorama UV polygon; fill after calibration or external tooling.\"}";
             File.WriteAllText(Path.Combine(sessionDir, "roi_book.json"), roiBookTemplate, new UTF8Encoding(false));
             LevelScript.WritePanoReferenceJson(sessionDir, scene.name);
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"Sc2bLectureHall: failed to write scene ROI JSON ({e.Message})");
-        }
+        });
     }
 
     static void AppendTransformBlock(StringBuilder sb, string key, Transform t)
@@ -900,12 +848,11 @@ public class Sc2bLectureHall : LevelScript
     {
         if (timeseriesWriter == null)
             return;
-        string pCol = havePupilTs ? F(pupilTs) : "";
         string cCol = gazePacket ? F(conf) : "";
         timeseriesWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             state.ToString(CultureInfo.InvariantCulture),
             cCol,
             valid.ToString(CultureInfo.InvariantCulture),
@@ -913,21 +860,17 @@ public class Sc2bLectureHall : LevelScript
             CsvEscape(hitTag),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz,
-            _gazeCsvParticipantGroup,
-            _gazeCsvParticipantId,
-            _gazeSessionId));
+            gwx, gwy, gwz));
     }
 
     void WriteEventRow(float sinceStart, bool havePupilTs, double pupilTs, float conf, int valid, string hitName, string hitTag, string invalidReason, string ev, string glx, string gly, string glz, string gyaw, string gpit, string gu, string gv, string gwx, string gwy, string gwz)
     {
         if (eventsWriter == null)
             return;
-        string pCol = havePupilTs ? F(pupilTs) : "";
         eventsWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             CsvEscape(ev),
             F(conf),
             valid.ToString(CultureInfo.InvariantCulture),
@@ -935,10 +878,7 @@ public class Sc2bLectureHall : LevelScript
             CsvEscape(hitTag),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz,
-            _gazeCsvParticipantGroup,
-            _gazeCsvParticipantId,
-            _gazeSessionId));
+            gwx, gwy, gwz));
     }
 
     void MaybePeriodicFlushCsv()
@@ -957,22 +897,18 @@ public class Sc2bLectureHall : LevelScript
     void OpenSessionCsvWriters()
     {
         CloseSessionCsvWriters();
-        string dir = recorder != null ? recorder.customPath : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
+        string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
         Directory.CreateDirectory(dir);
-
-        _gazeSessionId = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture).Substring(0, 8);
-        _gazeCsvParticipantGroup = CsvEscape(UserGroup ?? "");
-        _gazeCsvParticipantId = CsvEscape(UserName ?? "");
 
         timeseriesWriter = new StreamWriter(Path.Combine(dir, "gaze_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         eventsWriter = new StreamWriter(Path.Combine(dir, "gaze_events.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         headWriter = new StreamWriter(Path.Combine(dir, "head_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         controllerWriter = new StreamWriter(Path.Combine(dir, "controller_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
 
-        timeseriesWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
-        eventsWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
-        headWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_book,head_angle_to_book");
-        controllerWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,hand,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,velocity_linear,velocity_angular,trigger_pressed,grip_pressed,button_events");
+        timeseriesWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + ",state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
+        eventsWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + ",event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
+        headWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + ",position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_book,head_angle_to_book");
+        controllerWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + "," + ControllerTimeseriesLog.PoseColumnsHeader + "," + ControllerTimeseriesLog.ButtonColumnsHeader);
 
         _lastCsvFlushTime = Time.time;
         timeseriesWriter.Flush();
@@ -1016,18 +952,17 @@ public class Sc2bLectureHall : LevelScript
     {
         try
         {
-            string dir = recorder != null ? recorder.customPath : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
+            string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
             if (string.IsNullOrWhiteSpace(dir))
                 return;
             Directory.CreateDirectory(dir);
-            float bookDwell = lookedbookcount * period;
-            float elseDwell = lookedelsecount * period;
             string path = Path.Combine(dir, "sc2b_summary.csv");
             string summary =
-                "lookedbookcount,lookedbooktime_s,lookedelsecount,lookedelsetime_s,hits,misses,false_alarms,correct_rejections,created_at\n" +
-                $"{lookedbookcount},{bookDwell.ToString("0.0", CultureInfo.InvariantCulture)}," +
-                $"{lookedelsecount},{elseDwell.ToString("0.0", CultureInfo.InvariantCulture)}," +
+                "lookedbookcount,lookedbooktime_ms,lookedelsecount,lookedelsetime_ms,hits,misses,false_alarms,correct_rejections,commission_errors,omission_errors,created_at\n" +
+                $"{lookedbookcount},{StudyCsvTime.GazeSampleCountToMs(lookedbookcount, period)}," +
+                $"{lookedelsecount},{StudyCsvTime.GazeSampleCountToMs(lookedelsecount, period)}," +
                 $"{_summaryHits},{_summaryMisses},{_summaryFalseAlarms},{_summaryCorrectRejections}," +
+                $"{_summaryFalseAlarms},{_summaryMisses}," +
                 $"{DateTime.Now:O}\n";
             File.WriteAllText(path, summary, new UTF8Encoding(false));
         }
@@ -1037,9 +972,9 @@ public class Sc2bLectureHall : LevelScript
         }
     }
 
-    void AppendTrialRow(int trialIndexOneBased, double unityStimulusTime, double pupilStimulusTime, int digit, int targetFlag, int responseFlag, int outcomeCode, string reactionTimeCell)
+    void AppendTrialRow(float sinceTaskStartSec, int trialIndexOneBased, double unityStimulusTime, double pupilStimulusTime, int digit, int targetFlag, int responseFlag, int outcomeCode, int accuracyCode, string reactionTimeCell)
     {
-        string dir = recorder != null ? recorder.customPath : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
+        string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall);
         Directory.CreateDirectory(dir);
         _trialCsvPath = Path.Combine(dir, "task_trials.csv");
 
@@ -1048,14 +983,18 @@ public class Sc2bLectureHall : LevelScript
             if (!File.Exists(_trialCsvPath))
             {
                 string header =
+                    "time_since_task_start_ms," +
                     "sequence_seed," +
                     "trial_index," +
-                    "unity_time_s_stimulus_onset," +
-                    "pupil_timestamp_s_at_stimulus_onset," +
+                    "unity_time_ms_stimulus_onset," +
+                    "pupil_timestamp_ms_at_stimulus_onset," +
                     "digit," +
                     "target," +
                     "response," +
-                    OutcomeColumnName + "," +
+                    StudyTaskTrialsLog.OutcomeColumnName + "," +
+                    "commission_0_no_1_yes," +
+                    "omission_0_no_1_yes," +
+                    "accuracy_1_correct_0_wrong_2_no_response," +
                     "reaction_time_ms," +
                     "created_at\n";
                 File.WriteAllText(_trialCsvPath, header, new UTF8Encoding(false));
@@ -1063,19 +1002,19 @@ public class Sc2bLectureHall : LevelScript
             _trialCsvHeaderWritten = true;
         }
 
-        string pupilCell = double.IsNaN(pupilStimulusTime)
-            ? "NaN"
-            : pupilStimulusTime.ToString(CultureInfo.InvariantCulture);
-
         string row =
+            StudyCsvTime.FormatSecondsAsMs(sinceTaskStartSec) + "," +
             _loggedSequenceSeed.ToString(CultureInfo.InvariantCulture) + "," +
             trialIndexOneBased.ToString(CultureInfo.InvariantCulture) + "," +
-            unityStimulusTime.ToString(CultureInfo.InvariantCulture) + "," +
-            pupilCell + "," +
+            StudyCsvTime.FormatSecondsAsMs(unityStimulusTime) + "," +
+            StudyCsvTime.FormatOptionalTimestampCellMs(pupilStimulusTime) + "," +
             digit.ToString(CultureInfo.InvariantCulture) + "," +
             targetFlag.ToString(CultureInfo.InvariantCulture) + "," +
             responseFlag.ToString(CultureInfo.InvariantCulture) + "," +
             outcomeCode.ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.CommissionFromOutcome(outcomeCode).ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.OmissionFromOutcome(outcomeCode).ToString(CultureInfo.InvariantCulture) + "," +
+            accuracyCode.ToString(CultureInfo.InvariantCulture) + "," +
             reactionTimeCell + "," +
             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "\n";
 

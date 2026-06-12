@@ -21,7 +21,7 @@ public class Loginmanager : MonoBehaviour
     [SerializeField] TMP_Text ErrorMessage = null;
 
     private string UserId;
-    const string DemographicsHeader = "username,age,gender,highest_education,group,vision,hearing,platform,scene_order,created_at";
+    const string DemographicsHeader = "username,age,gender,highest_education,group,vision,hearing,scene_order,created_at";
 
     string _platform;
     public string Platform
@@ -56,17 +56,13 @@ public class Loginmanager : MonoBehaviour
     {
         string username = IFUserName.text.Trim();
         string group = DDGroup.captionText.text;
-        string baseDataPath = $"{Application.dataPath}/Data";
-        string groupPath = $"{baseDataPath}/{group}";
+        string baseDataPath = LevelScript.GetDataRootPath();
         string demographicsPath = $"{baseDataPath}/demographics.csv";
-        string sc1LivingRoomUserPath = LevelScript.GetDataPathForLevel(LevelScript.DataFolderSc1LivingRoom, group, username);
 
         BtSubmit.interactable = false;
         try
         {
             Directory.CreateDirectory(baseDataPath);
-            Directory.CreateDirectory(groupPath);
-            Directory.CreateDirectory(sc1LivingRoomUserPath);
 
             StringBuilder rowBuilder = new StringBuilder(256);
             rowBuilder.Append(EscapeCsv(username)).Append(",");
@@ -76,7 +72,6 @@ public class Loginmanager : MonoBehaviour
             rowBuilder.Append(EscapeCsv(group)).Append(",");
             rowBuilder.Append(EscapeCsv(DDVision.captionText.text)).Append(",");
             rowBuilder.Append(EscapeCsv(DDHearing.captionText.text)).Append(",");
-            rowBuilder.Append(EscapeCsv(Platform)).Append(",");
             string sceneOrder = DDSceneOrder != null
                 ? DDSceneOrder.options[DDSceneOrder.value].text
                 : StudySceneFlow.DropdownLabelForward;

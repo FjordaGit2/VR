@@ -1,7 +1,4 @@
 ﻿using System.Collections;
-using System.Globalization;
-using System.IO;
-using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,7 +11,6 @@ public class Sc1Question : MonoBehaviour
     string _q3 = "";
     string _q4 = "";
 
-    const string AnswersHeader = "username,q1,q2,q3,q4,created_at";
     bool _submitting;
 
     public string Q1 { set { _q1 = value; Validate(); } }
@@ -34,7 +30,6 @@ public class Sc1Question : MonoBehaviour
 
     void Validate()
     {
-
         if (BtSubmit != null)
             BtSubmit.interactable = _q1 != "" && _q2 != "" && _q3 != "" && _q4 != "";
     }
@@ -66,23 +61,8 @@ public class Sc1Question : MonoBehaviour
 
         try
         {
-            string dir = LevelScript.GetQuestionnairePath(LevelScript.DataFolderSc1Questionnaire);
-            Directory.CreateDirectory(dir);
-
-            string path = Path.Combine(dir, "answers.csv");
-            if (!File.Exists(path))
-                File.WriteAllText(path, AnswersHeader + "\n", new UTF8Encoding(false));
-
-            string row = string.Join(",",
-                LevelScript.EscapeCsvField(LevelScript.UserName),
-                LevelScript.EscapeCsvField(_q1),
-                LevelScript.EscapeCsvField(_q2),
-                LevelScript.EscapeCsvField(_q3),
-                LevelScript.EscapeCsvField(_q4),
-                System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
-            File.AppendAllText(path, row + "\n", new UTF8Encoding(false));
-
-            Debug.Log($"Sc1Question: saved to {path}");
+            StudyQuestionnaireSave.SaveAnswers(LevelScript.QuestionnaireFileSc1, new[] { _q1, _q2, _q3, _q4 });
+            Debug.Log($"Sc1Question: saved to {LevelScript.GetQuestionnaireDirectory()}/{LevelScript.QuestionnaireFileSc1}");
             LevelScript.NextScene();
         }
         catch (System.Exception e)

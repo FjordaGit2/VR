@@ -45,7 +45,7 @@ public class Sc1LivingRoom : LevelScript
     [Min(0.5f)]
     public float csvFlushIntervalSeconds = 2f;
 
-    [Tooltip("Analog squeeze above this counts as trigger_pressed = 1.")]
+    [Tooltip("Index trigger pull (Squeeze axis) above this counts as trigger_pressed = 1.")]
     [Range(0f, 1f)]
     public float triggerPressThreshold = 0.5f;
 
@@ -56,6 +56,7 @@ public class Sc1LivingRoom : LevelScript
     float videoStartUnityTime;
     float lastCsvFlushTime;
     bool csvGazeLogging;
+    bool _endTaskTriggered;
     bool hasPreviousObservedState;
     int previousObservedState;
 
@@ -67,10 +68,6 @@ public class Sc1LivingRoom : LevelScript
     float headLastAngSpeed;
     int headKinTickCount;
 
-    string _gazeSessionId;
-    string _gazeCsvParticipantGroup;
-    string _gazeCsvParticipantId;
-
     const int StateTv = 1;
     const int StateNotTv = 0;
     const int StateInvalid = -1;
@@ -79,7 +76,7 @@ public class Sc1LivingRoom : LevelScript
 
     void Awake()
     {
-        recorder.customPath = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom);
+        recorder.customPath = LevelScript.GetEyeTrackingPath(LevelScript.DataFolderSc1LivingRoom);
     }
 
     private void OnEnable()
@@ -107,17 +104,16 @@ public class Sc1LivingRoom : LevelScript
 
     void Update()
     {
-        StartBTN.onClick.AddListener(buttonIsClicked);
-
-        if (!isStarted && btnIsClicked)
+        if (ConsumeStartButtonForTask())
         {
             StartTask();
             recorder.StartRecording();
             Pointer.SetActive(false);
         }
 
-        if (isStarted && video.isPaused)
+        if (isStarted && video.isPaused && !_endTaskTriggered)
         {
+            _endTaskTriggered = true;
             isStarted = false;
             btnIsClicked = false;
             StartCoroutine(EndTask());
@@ -135,7 +131,7 @@ public class Sc1LivingRoom : LevelScript
 
                 ProcessGazeTick(sinceVideo, havePupilTs, pupilTs);
                 ProcessHeadMotionRow(sinceVideo, havePupilTs, pupilTs);
-                ProcessControllerHandRow(sinceVideo, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand, "right");
+                ProcessControllerHandRow(sinceVideo, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand);
                 MaybePeriodicFlushCsv();
             }
         }
@@ -294,11 +290,10 @@ public class Sc1LivingRoom : LevelScript
                 angCol = F(Vector3.Angle(cam.forward, toTv.normalized));
         }
 
-        string pCol = havePupilTs ? F(pupilTs) : "";
         headWriter.WriteLine(string.Join(",",
-            F(sinceVideo),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceVideo),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             F(p.x), F(p.y), F(p.z),
             F(euler.x), F(euler.y), F(euler.z),
             F(fwd.x), F(fwd.y), F(fwd.z),
@@ -325,7 +320,7 @@ public class Sc1LivingRoom : LevelScript
         headKinTickCount++;
     }
 
-    void ProcessControllerHandRow(float sinceVideo, bool havePupilTs, double pupilTs, SteamVR_Input_Sources hand, string handLabel)
+    void ProcessControllerHandRow(float sinceVideo, bool havePupilTs, double pupilTs, SteamVR_Input_Sources hand)
     {
         if (controllerWriter == null)
             return;
@@ -369,61 +364,17 @@ public class Sc1LivingRoom : LevelScript
             vAng = av.magnitude;
         }
 
-        int triggerPressed = 0;
-        int gripPressed = 0;
-        if (SteamVR.initializedState == SteamVR.InitializedStates.InitializeSuccess)
-        {
-            var squeeze = SteamVR_Actions.default_Squeeze;
-            if (squeeze != null && squeeze.activeBinding)
-                triggerPressed = squeeze.GetAxis(hand) >= triggerPressThreshold ? 1 : 0;
-            var grip = SteamVR_Actions.default_GrabGrip;
-            if (grip != null && grip.activeBinding)
-                gripPressed = grip.GetState(hand) ? 1 : 0;
-        }
+        var buttons = ControllerTimeseriesLog.Capture(hand, triggerPressThreshold);
 
-        string buttonEvents = BuildControllerButtonEvents(hand);
-
-        string pCol = havePupilTs ? F(pupilTs) : "";
         controllerWriter.WriteLine(string.Join(",",
-            F(sinceVideo),
-            pCol,
-            F(Time.time),
-            CsvEscape(handLabel),
+            StudyCsvTime.FormatSecondsAsMs(sinceVideo),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             F(p.x), F(p.y), F(p.z),
             F(euler.x), F(euler.y), F(euler.z),
             F(vLin),
             F(vAng),
-            triggerPressed.ToString(CultureInfo.InvariantCulture),
-            gripPressed.ToString(CultureInfo.InvariantCulture),
-            CsvEscape(buttonEvents)));
-    }
-
-    static string BuildControllerButtonEvents(SteamVR_Input_Sources hand)
-    {
-        if (SteamVR.initializedState != SteamVR.InitializedStates.InitializeSuccess)
-            return "";
-
-        var sb = new StringBuilder(64);
-        AppendBoolEdges(sb, SteamVR_Actions.default_GrabPinch, hand, "grab_pinch");
-        AppendBoolEdges(sb, SteamVR_Actions.default_GrabGrip, hand, "grab_grip");
-        AppendBoolEdges(sb, SteamVR_Actions.default_InteractUI, hand, "interact_ui");
-        AppendBoolEdges(sb, SteamVR_Actions.default_Teleport, hand, "teleport");
-        AppendBoolEdges(sb, SteamVR_Actions.default_TouchpadClick, hand, "touchpad_click");
-        AppendBoolEdges(sb, SteamVR_Actions.default_SnapTurnLeft, hand, "snap_turn_left");
-        AppendBoolEdges(sb, SteamVR_Actions.default_SnapTurnRight, hand, "snap_turn_right");
-        if (sb.Length > 0 && sb[sb.Length - 1] == ';')
-            sb.Length -= 1;
-        return sb.ToString();
-    }
-
-    static void AppendBoolEdges(StringBuilder sb, SteamVR_Action_Boolean action, SteamVR_Input_Sources hand, string id)
-    {
-        if (action == null || !action.activeBinding)
-            return;
-        if (action.GetStateDown(hand))
-            sb.Append(id).Append("_down;");
-        if (action.GetStateUp(hand))
-            sb.Append(id).Append("_up;");
+            ControllerTimeseriesLog.FormatButtonColumns(buttons)));
     }
 
     static Transform GetTrackingRigOrigin()
@@ -483,14 +434,14 @@ public class Sc1LivingRoom : LevelScript
 
     void WriteSceneReferenceJsonFiles(string sessionDir)
     {
-        try
+        WriteSceneReferenceJsonOnce(sessionDir, () =>
         {
             var scene = SceneManager.GetActiveScene();
             var sb = new StringBuilder(1024);
             sb.Append('{');
             sb.Append("\"schema\":\"sc1_scene_rois v1\",");
             sb.Append("\"unity_scene_name\":").Append(JsonString(scene.name)).Append(',');
-            sb.Append("\"unity_time_at_snapshot\":").Append(F(Time.time)).Append(',');
+            sb.Append("\"unity_time_ms_at_snapshot\":").Append(StudyCsvTime.FormatSecondsAsMs(Time.time)).Append(',');
             sb.Append("\"equirect_heatmap_columns\":").Append(JsonString("gaze_hmd_local_x,y,z (HMD +Z forward +Y up); yaw_deg; pitch_deg; equirect_u,v zenith-top pano; see VrGazeEquirectMetrics")).Append(',');
             AppendTransformBlock(sb, "tv", GetTvTransformForSnapshot());
             sb.Append(',');
@@ -504,11 +455,7 @@ public class Sc1LivingRoom : LevelScript
             const string roiTvTemplate = "{\"roi_name\":\"TV\",\"type\":\"polygon\",\"points\":[],\"note\":\"Normalized panorama UV polygon; fill after calibration or external tooling.\"}";
             File.WriteAllText(Path.Combine(sessionDir, "roi_tv.json"), roiTvTemplate, new UTF8Encoding(false));
             LevelScript.WritePanoReferenceJson(sessionDir, scene.name);
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"Sc1LivingRoom: failed to write scene ROI JSON ({e.Message})");
-        }
+        });
     }
 
     /// <summary>TV gaze events: valid↔valid and TV↔invalid so dwell is not inflated when tracking drops.</summary>
@@ -571,12 +518,11 @@ public class Sc1LivingRoom : LevelScript
     {
         if (timeseriesWriter == null)
             return;
-        string pCol = havePupilTs ? F(pupilTs) : "";
         string cCol = gazePacket ? F(conf) : "";
         timeseriesWriter.WriteLine(string.Join(",",
-            F(sinceVideo),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceVideo),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             state.ToString(CultureInfo.InvariantCulture),
             cCol,
             valid.ToString(CultureInfo.InvariantCulture),
@@ -584,21 +530,17 @@ public class Sc1LivingRoom : LevelScript
             CsvEscape(hitTag),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz,
-            _gazeCsvParticipantGroup,
-            _gazeCsvParticipantId,
-            _gazeSessionId));
+            gwx, gwy, gwz));
     }
 
     void WriteEventRow(float sinceVideo, bool havePupilTs, double pupilTs, float conf, int valid, string hitName, string hitTag, string invalidReason, string ev, string glx, string gly, string glz, string gyaw, string gpit, string gu, string gv, string gwx, string gwy, string gwz)
     {
         if (eventsWriter == null)
             return;
-        string pCol = havePupilTs ? F(pupilTs) : "";
         eventsWriter.WriteLine(string.Join(",",
-            F(sinceVideo),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceVideo),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             CsvEscape(ev),
             F(conf),
             valid.ToString(CultureInfo.InvariantCulture),
@@ -606,10 +548,7 @@ public class Sc1LivingRoom : LevelScript
             CsvEscape(hitTag),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz,
-            _gazeCsvParticipantGroup,
-            _gazeCsvParticipantId,
-            _gazeSessionId));
+            gwx, gwy, gwz));
     }
 
     void MaybePeriodicFlushCsv()
@@ -628,22 +567,18 @@ public class Sc1LivingRoom : LevelScript
     void OpenSessionCsvWriters()
     {
         CloseSessionCsvWriters();
-        string dir = recorder.customPath;
+        string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom);
         Directory.CreateDirectory(dir);
-
-        _gazeSessionId = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture).Substring(0, 8);
-        _gazeCsvParticipantGroup = CsvEscape(UserGroup ?? "");
-        _gazeCsvParticipantId = CsvEscape(UserName ?? "");
 
         timeseriesWriter = new StreamWriter(Path.Combine(dir, "gaze_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         eventsWriter = new StreamWriter(Path.Combine(dir, "gaze_events.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         headWriter = new StreamWriter(Path.Combine(dir, "head_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         controllerWriter = new StreamWriter(Path.Combine(dir, "controller_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
 
-        timeseriesWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
-        eventsWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
-        headWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_tv,head_angle_to_tv");
-        controllerWriter.WriteLine("time_since_video_s,pupil_timestamp_s,unity_time_s,hand,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,velocity_linear,velocity_angular,trigger_pressed,grip_pressed,button_events");
+        timeseriesWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
+        eventsWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
+        headWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_tv,head_angle_to_tv");
+        controllerWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + "," + ControllerTimeseriesLog.PoseColumnsHeader + "," + ControllerTimeseriesLog.ButtonColumnsHeader);
 
         lastCsvFlushTime = Time.time;
         timeseriesWriter.Flush();
@@ -685,22 +620,16 @@ public class Sc1LivingRoom : LevelScript
 
     IEnumerator Post()
     {
-        float tvDwell = lookedtvcount * period;
-        float elseDwell = lookedelsecount * period;
-
         try
         {
-            string dir = recorder != null ? recorder.customPath : "";
-            if (string.IsNullOrWhiteSpace(dir))
-            {
-                dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom);
-            }
-
+            string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom);
             Directory.CreateDirectory(dir);
             string summaryPath = Path.Combine(dir, "sc1_summary.csv");
             string summary =
-                "username,lookedtvcount,lookedtvtime,lookedelsecount,lookedelsetime,created_at\n" +
-                $"{UserName},{lookedtvcount},{tvDwell.ToString("0.0", CultureInfo.InvariantCulture)},{lookedelsecount},{elseDwell.ToString("0.0", CultureInfo.InvariantCulture)},{System.DateTime.Now:O}\n";
+                "username,lookedtvcount,lookedtvtime_ms,lookedelsecount,lookedelsetime_ms,created_at\n" +
+                $"{UserName},{lookedtvcount},{StudyCsvTime.GazeSampleCountToMs(lookedtvcount, period)}," +
+                $"{lookedelsecount},{StudyCsvTime.GazeSampleCountToMs(lookedelsecount, period)}," +
+                $"{System.DateTime.Now:O}\n";
             File.WriteAllText(summaryPath, summary, new UTF8Encoding(false));
         }
         catch (Exception e)
@@ -713,6 +642,8 @@ public class Sc1LivingRoom : LevelScript
 
     new public void StartTask()
     {
+        if (csvGazeLogging)
+            return;
         base.StartTask();
         lookedtvcount = 0;
         lookedelsecount = 0;
@@ -728,7 +659,7 @@ public class Sc1LivingRoom : LevelScript
 
         OpenSessionCsvWriters();
         if (gazeOriginCamera != null)
-            WriteSceneReferenceJsonFiles(recorder.customPath);
+            WriteSceneReferenceJsonFiles(LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc1LivingRoom));
         csvGazeLogging = true;
 
         video.Play();
@@ -748,7 +679,6 @@ public class Sc1LivingRoom : LevelScript
 
         recorder.StopRecording();
         StartCoroutine(Post());
-        StartCoroutine(SetLevel(SceneType.Sc1Questionnaire));
         yield return new WaitForSeconds(1);
         NextScene();
     }

@@ -111,6 +111,17 @@ public class SC3bStreet : LevelScript
     int _previousObservedState;
     int _lookedRoadTargetCount;
     int _lookedElseCount;
+    int _lookedCorrectCount;
+    int _lookedWrongCount;
+    int _trialGazeSampleCount;
+    int _summaryHitsTouchpad;
+    int _summaryMissesTouchpad;
+    int _summaryFalseAlarmsTouchpad;
+    int _summaryCorrectRejectionsTouchpad;
+    int _summaryHitsBoth;
+    int _summaryMissesBoth;
+    int _summaryFalseAlarmsBoth;
+    int _summaryCorrectRejectionsBoth;
     bool _headMotionPrimed;
     Vector3 _headPrevWorldPos;
     Quaternion _headPrevWorldRot;
@@ -120,10 +131,6 @@ public class SC3bStreet : LevelScript
     int _headKinTickCount;
     string _trialCsvPath;
     bool _trialCsvHeaderWritten;
-    string _gazeSessionId;
-    string _gazeCsvParticipantGroup;
-    string _gazeCsvParticipantId;
-
     GazeData _lastGaze;
 
     void Awake()
@@ -137,7 +144,7 @@ public class SC3bStreet : LevelScript
 
         if (recorder != null)
         {
-            recorder.customPath = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
+            recorder.customPath = LevelScript.GetEyeTrackingPath(LevelScript.DataFolderSc3bStreet);
             if (recorder.requestCtrl != null)
                 _ = recorder.requestCtrl.IsConnected;
         }
@@ -172,7 +179,7 @@ public class SC3bStreet : LevelScript
 
     void Update()
     {
-        if (btnIsClicked && !isStarted)
+        if (ConsumeStartButtonForTask())
         {
             StartTask();
             if (recorder != null)
@@ -192,7 +199,7 @@ public class SC3bStreet : LevelScript
                 double pupilTs = havePupilTs ? gd.PupilTimestamp : 0;
                 ProcessGazeTick(sinceStart, havePupilTs, pupilTs);
                 ProcessHeadMotionRow(sinceStart, havePupilTs, pupilTs);
-                ProcessControllerHandRow(sinceStart, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand, "right");
+                ProcessControllerHandRow(sinceStart, havePupilTs, pupilTs, SteamVR_Input_Sources.RightHand);
                 MaybePeriodicFlushCsv();
             }
         }
@@ -230,11 +237,24 @@ public class SC3bStreet : LevelScript
 
     new public void StartTask()
     {
+        if (_csvSessionLogging)
+            return;
         base.StartTask();
         StartCoroutine(ClearData("sc3b_data"));
 
         _lookedRoadTargetCount = 0;
         _lookedElseCount = 0;
+        _lookedCorrectCount = 0;
+        _lookedWrongCount = 0;
+        _trialGazeSampleCount = 0;
+        _summaryHitsTouchpad = 0;
+        _summaryMissesTouchpad = 0;
+        _summaryFalseAlarmsTouchpad = 0;
+        _summaryCorrectRejectionsTouchpad = 0;
+        _summaryHitsBoth = 0;
+        _summaryMissesBoth = 0;
+        _summaryFalseAlarmsBoth = 0;
+        _summaryCorrectRejectionsBoth = 0;
         _hasPreviousObservedState = false;
         _previousObservedState = StateInvalid;
         _headMotionPrimed = false;
@@ -251,9 +271,7 @@ public class SC3bStreet : LevelScript
         OpenSessionCsvWriters();
         if (gazeOriginCamera != null)
         {
-            string dir = recorder != null
-                ? recorder.customPath
-                : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
+            string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
             WriteSceneReferenceJsonFiles(dir);
         }
 
@@ -431,6 +449,7 @@ public class SC3bStreet : LevelScript
             _trialPressedLeft = null;
             _trialRtMs = 0f;
             _trialLookedGaze = "";
+            _trialGazeSampleCount = 0;
 
             _carOnsetUnityTime = Time.time;
             double unityOnset = _carOnsetUnityTime;
@@ -451,32 +470,50 @@ public class SC3bStreet : LevelScript
             string looked = string.IsNullOrEmpty(_trialLookedGaze)
                 ? SampleGazeRoadLabel()
                 : _trialLookedGaze;
-            string lookedAccuracy = ComputeLookedAccuracy(_currentRoadSide, looked);
-            bool touchpadCorrect = _trialResponded
-                && IsOppositeTouchpadResponse(_currentRoadSide, _trialPressedLeft == true);
-            bool gazeCorrect = lookedAccuracy == "Correct";
-            string accuracy;
-            if (!_trialResponded)
-                accuracy = "NoResponse";
-            else if (touchpadCorrect && gazeCorrect)
-                accuracy = "Correct";
-            else
-                accuracy = "Wrong";
+            int lookedAccuracyCode = ComputeLookedAccuracyCode(_currentRoadSide, looked);
+            int touchpadAccuracyCode = ComputeTouchpadAccuracyCode(
+                _trialResponded, _currentRoadSide, _trialPressedLeft == true);
+            int responseFlag = _trialResponded ? 1 : 0;
+            int bothAccuracyCode = ComputeBothAccuracyCode(
+                responseFlag, touchpadAccuracyCode, lookedAccuracyCode);
+            int touchpadOutcomeCode = StudyTaskTrialsLog.ComputeRespondGoOutcomeCode(
+                responseFlag, touchpadAccuracyCode);
+            int bothOutcomeCode = StudyTaskTrialsLog.ComputeRespondGoOutcomeCode(
+                responseFlag, bothAccuracyCode);
+            StudyTaskTrialsLog.IncrementOutcomeSummary(
+                touchpadOutcomeCode,
+                ref _summaryHitsTouchpad,
+                ref _summaryMissesTouchpad,
+                ref _summaryFalseAlarmsTouchpad,
+                ref _summaryCorrectRejectionsTouchpad);
+            StudyTaskTrialsLog.IncrementOutcomeSummary(
+                bothOutcomeCode,
+                ref _summaryHitsBoth,
+                ref _summaryMissesBoth,
+                ref _summaryFalseAlarmsBoth,
+                ref _summaryCorrectRejectionsBoth);
             string rtCell = _trialResponded
                 ? _trialRtMs.ToString("0.###", CultureInfo.InvariantCulture)
                 : "NaN";
+            float sinceTaskStartSec = _carOnsetUnityTime - _sessionLogStartUnityTime;
+
+            CommitTrialGazeToOutcomeBuckets(bothAccuracyCode);
 
             AppendTrialRow(
+                sinceTaskStartSec,
                 _trialIndex + 1,
                 unityOnset,
                 pupilOnset,
                 carShown,
-                _currentCarIndex,
                 arrowPressed,
-                accuracy,
-                rtCell,
                 looked,
-                lookedAccuracy);
+                lookedAccuracyCode,
+                touchpadAccuracyCode,
+                bothAccuracyCode,
+                responseFlag,
+                touchpadOutcomeCode,
+                bothOutcomeCode,
+                rtCell);
 
             yield return WaitMs(interTrialIntervalMs);
         }
@@ -487,7 +524,6 @@ public class SC3bStreet : LevelScript
 
         if (recorder != null)
             recorder.StopRecording();
-        StartCoroutine(SetLevel(SceneType.Sc3bQuestionnaire));
         if (postBlockDelayBeforeNextSceneMs > 0)
             yield return WaitMs(postBlockDelayBeforeNextSceneMs);
         NextScene();
@@ -548,33 +584,49 @@ public class SC3bStreet : LevelScript
         return (carRoadSide == 0) != pressedLeft;
     }
 
-    /// <summary>Sc3b: gaze on opposite road collider (Left/Right tag) from car side.</summary>
-    static string ComputeLookedAccuracy(int carRoadSide, string lookedLabel)
+    /// <summary>Sc3b gaze accuracy: 0 wrong, 1 correct, 2 else, 3 no gaze.</summary>
+    static int ComputeLookedAccuracyCode(int carRoadSide, string lookedLabel)
     {
         if (string.IsNullOrEmpty(lookedLabel))
-            return "NoGaze";
+            return 3;
         if (lookedLabel == "Else")
-            return "Else";
+            return 2;
         bool lookedLeft = lookedLabel == "Left";
         bool opposite = (carRoadSide == 0) != lookedLeft;
-        return opposite ? "Correct" : "Wrong";
+        return opposite ? 1 : 0;
+    }
+
+    static int ComputeTouchpadAccuracyCode(bool responded, int carRoadSide, bool pressedLeft)
+    {
+        if (!responded)
+            return 2;
+        return IsOppositeTouchpadResponse(carRoadSide, pressedLeft) ? 1 : 0;
+    }
+
+    static int ComputeBothAccuracyCode(int responseFlag, int touchpadAccuracyCode, int lookedAccuracyCode)
+    {
+        if (responseFlag == 0)
+            return 2;
+        return touchpadAccuracyCode == 1 && lookedAccuracyCode == 1 ? 1 : 0;
     }
 
     void AppendTrialRow(
+        float sinceTaskStartSec,
         int trialIndexOneBased,
         double unityCarOnset,
         double pupilCarOnset,
         string carShown,
-        int carPrefabIndex,
         string arrowPressed,
-        string accuracy,
-        string reactionTimeCell,
         string looked,
-        string lookedAccuracy)
+        int lookedAccuracyCode,
+        int touchpadAccuracyCode,
+        int bothAccuracyCode,
+        int responseFlag,
+        int touchpadOutcomeCode,
+        int bothOutcomeCode,
+        string reactionTimeCell)
     {
-        string dir = recorder != null
-            ? recorder.customPath
-            : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
+        string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
         Directory.CreateDirectory(dir);
         _trialCsvPath = Path.Combine(dir, "task_trials.csv");
 
@@ -583,17 +635,26 @@ public class SC3bStreet : LevelScript
             if (!File.Exists(_trialCsvPath))
             {
                 string header =
+                    "time_since_task_start_ms," +
                     "sequence_seed," +
                     "trial_index," +
-                    "unity_time_s_car_onset," +
-                    "pupil_timestamp_s_at_car_onset," +
+                    "unity_time_ms_car_onset," +
+                    "pupil_timestamp_ms_at_car_onset," +
                     "car_shown," +
-                    "car_prefab_index," +
                     "arrow_pressed," +
-                    "accuracy," +
-                    "reaction_time_ms," +
                     "looked," +
-                    "looked_accuracy," +
+                    "looked_accuracy_0_wrong_1_correct_2_else_3_no_gaze," +
+                    "touchpad_accuracy_1_correct_0_wrong_2_no_response," +
+                    "accuracy_both_1_correct_0_wrong_2_no_response," +
+                    "target," +
+                    "response," +
+                    StudyTaskTrialsLog.OutcomeColumnName + "," +
+                    "commission_touchpad_0_no_1_yes," +
+                    "omission_touchpad_0_no_1_yes," +
+                    StudyTaskTrialsLog.OutcomeBothColumnName + "," +
+                    "commission_both_0_no_1_yes," +
+                    "omission_both_0_no_1_yes," +
+                    "reaction_time_ms," +
                     "created_at\n";
                 File.WriteAllText(_trialCsvPath, header, new UTF8Encoding(false));
             }
@@ -601,22 +662,27 @@ public class SC3bStreet : LevelScript
             _trialCsvHeaderWritten = true;
         }
 
-        string pupilCell = double.IsNaN(pupilCarOnset)
-            ? "NaN"
-            : pupilCarOnset.ToString(CultureInfo.InvariantCulture);
-
         string row =
+            StudyCsvTime.FormatSecondsAsMs(sinceTaskStartSec) + "," +
             _loggedSequenceSeed.ToString(CultureInfo.InvariantCulture) + "," +
             trialIndexOneBased.ToString(CultureInfo.InvariantCulture) + "," +
-            unityCarOnset.ToString(CultureInfo.InvariantCulture) + "," +
-            pupilCell + "," +
+            StudyCsvTime.FormatSecondsAsMs(unityCarOnset) + "," +
+            StudyCsvTime.FormatOptionalTimestampCellMs(pupilCarOnset) + "," +
             CsvEscape(carShown) + "," +
-            carPrefabIndex.ToString(CultureInfo.InvariantCulture) + "," +
             CsvEscape(arrowPressed) + "," +
-            CsvEscape(accuracy) + "," +
-            reactionTimeCell + "," +
             CsvEscape(looked) + "," +
-            CsvEscape(lookedAccuracy) + "," +
+            lookedAccuracyCode.ToString(CultureInfo.InvariantCulture) + "," +
+            touchpadAccuracyCode.ToString(CultureInfo.InvariantCulture) + "," +
+            bothAccuracyCode.ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.Sc3TargetAlwaysRespond.ToString(CultureInfo.InvariantCulture) + "," +
+            responseFlag.ToString(CultureInfo.InvariantCulture) + "," +
+            touchpadOutcomeCode.ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.CommissionFromOutcome(touchpadOutcomeCode).ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.OmissionFromOutcome(touchpadOutcomeCode).ToString(CultureInfo.InvariantCulture) + "," +
+            bothOutcomeCode.ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.CommissionFromOutcome(bothOutcomeCode).ToString(CultureInfo.InvariantCulture) + "," +
+            StudyTaskTrialsLog.OmissionFromOutcome(bothOutcomeCode).ToString(CultureInfo.InvariantCulture) + "," +
+            reactionTimeCell + "," +
             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "\n";
 
         File.AppendAllText(_trialCsvPath, row, new UTF8Encoding(false));
@@ -626,19 +692,25 @@ public class SC3bStreet : LevelScript
     {
         try
         {
-            string dir = recorder != null
-                ? recorder.customPath
-                : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
+            string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
             if (string.IsNullOrWhiteSpace(dir))
                 return;
             Directory.CreateDirectory(dir);
-            float roadDwell = _lookedRoadTargetCount * period;
-            float elseDwell = _lookedElseCount * period;
             string path = Path.Combine(dir, "sc3b_summary.csv");
             string summary =
-                "looked_road_target_count,looked_road_target_time_s,looked_else_count,looked_else_time_s,created_at\n" +
-                $"{_lookedRoadTargetCount},{roadDwell.ToString("0.0", CultureInfo.InvariantCulture)}," +
-                $"{_lookedElseCount},{elseDwell.ToString("0.0", CultureInfo.InvariantCulture)}," +
+                "looked_road_target_count,looked_road_target_time_ms,looked_else_count,looked_else_time_ms," +
+                "looked_correct_count,looked_correct_time_ms,looked_wrong_count,looked_wrong_time_ms," +
+                "hits_touchpad,misses_touchpad,false_alarms_touchpad,correct_rejections_touchpad,commission_errors_touchpad,omission_errors_touchpad," +
+                "hits_both,misses_both,false_alarms_both,correct_rejections_both,commission_errors_both,omission_errors_both," +
+                "created_at\n" +
+                $"{_lookedRoadTargetCount},{StudyCsvTime.GazeSampleCountToMs(_lookedRoadTargetCount, period)}," +
+                $"{_lookedElseCount},{StudyCsvTime.GazeSampleCountToMs(_lookedElseCount, period)}," +
+                $"{_lookedCorrectCount},{StudyCsvTime.GazeSampleCountToMs(_lookedCorrectCount, period)}," +
+                $"{_lookedWrongCount},{StudyCsvTime.GazeSampleCountToMs(_lookedWrongCount, period)}," +
+                $"{_summaryHitsTouchpad},{_summaryMissesTouchpad},{_summaryFalseAlarmsTouchpad},{_summaryCorrectRejectionsTouchpad}," +
+                $"{_summaryFalseAlarmsTouchpad},{_summaryMissesTouchpad}," +
+                $"{_summaryHitsBoth},{_summaryMissesBoth},{_summaryFalseAlarmsBoth},{_summaryCorrectRejectionsBoth}," +
+                $"{_summaryFalseAlarmsBoth},{_summaryMissesBoth}," +
                 $"{DateTime.Now:O}\n";
             File.WriteAllText(path, summary, new UTF8Encoding(false));
         }
@@ -746,7 +818,17 @@ public class SC3bStreet : LevelScript
                 _lookedRoadTargetCount++;
             else
                 _lookedElseCount++;
+            if (_responseWindowActive)
+                _trialGazeSampleCount++;
         }
+    }
+
+    void CommitTrialGazeToOutcomeBuckets(int bothAccuracyCode)
+    {
+        if (bothAccuracyCode == 1)
+            _lookedCorrectCount += _trialGazeSampleCount;
+        else if (bothAccuracyCode == 0)
+            _lookedWrongCount += _trialGazeSampleCount;
     }
 
     static bool IsRoadTargetTag(string tag)
@@ -791,11 +873,10 @@ public class SC3bStreet : LevelScript
                 angCol = F(Vector3.Angle(cam.forward, toRoad.normalized));
         }
 
-        string pCol = havePupilTs ? F(pupilTs) : "";
         _headWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             F(p.x), F(p.y), F(p.z),
             F(euler.x), F(euler.y), F(euler.z),
             F(fwd.x), F(fwd.y), F(fwd.z),
@@ -822,7 +903,7 @@ public class SC3bStreet : LevelScript
         _headKinTickCount++;
     }
 
-    void ProcessControllerHandRow(float sinceStart, bool havePupilTs, double pupilTs, SteamVR_Input_Sources hand, string handLabel)
+    void ProcessControllerHandRow(float sinceStart, bool havePupilTs, double pupilTs, SteamVR_Input_Sources hand)
     {
         if (_controllerWriter == null)
             return;
@@ -866,56 +947,33 @@ public class SC3bStreet : LevelScript
             vAng = av.magnitude;
         }
 
-        int triggerPressed = 0;
-        int gripPressed = 0;
-        if (SteamVR.initializedState == SteamVR.InitializedStates.InitializeSuccess)
-        {
-            var squeeze = SteamVR_Actions.default_Squeeze;
-            if (squeeze != null && squeeze.activeBinding)
-                triggerPressed = squeeze.GetAxis(hand) >= triggerPressThreshold ? 1 : 0;
-            var grip = SteamVR_Actions.default_GrabGrip;
-            if (grip != null && grip.activeBinding)
-                gripPressed = grip.GetState(hand) ? 1 : 0;
-        }
-
-        string buttonEvents = BuildControllerButtonEvents(hand);
-        string pCol = havePupilTs ? F(pupilTs) : "";
+        var buttons = ControllerTimeseriesLog.Capture(hand, triggerPressThreshold);
         _controllerWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
-            CsvEscape(handLabel),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             F(p.x), F(p.y), F(p.z),
             F(euler.x), F(euler.y), F(euler.z),
             F(vLin),
             F(vAng),
-            triggerPressed.ToString(CultureInfo.InvariantCulture),
-            gripPressed.ToString(CultureInfo.InvariantCulture),
-            CsvEscape(buttonEvents)));
+            ControllerTimeseriesLog.FormatButtonColumns(buttons)));
     }
 
     void OpenSessionCsvWriters()
     {
         CloseSessionCsvWriters();
-        string dir = recorder != null
-            ? recorder.customPath
-            : LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
+        string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3bStreet);
         Directory.CreateDirectory(dir);
-
-        _gazeSessionId = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)
-            + "_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture).Substring(0, 8);
-        _gazeCsvParticipantGroup = CsvEscape(UserGroup ?? "");
-        _gazeCsvParticipantId = CsvEscape(UserName ?? "");
 
         _timeseriesWriter = new StreamWriter(Path.Combine(dir, "gaze_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         _eventsWriter = new StreamWriter(Path.Combine(dir, "gaze_events.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         _headWriter = new StreamWriter(Path.Combine(dir, "head_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         _controllerWriter = new StreamWriter(Path.Combine(dir, "controller_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
 
-        _timeseriesWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
-        _eventsWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z,participant_group,participant_id,session_id");
-        _headWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_road,head_angle_to_road");
-        _controllerWriter.WriteLine("time_since_task_start_s,pupil_timestamp_s,unity_time_s,hand,position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,velocity_linear,velocity_angular,trigger_pressed,grip_pressed,button_events");
+        _timeseriesWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + ",state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
+        _eventsWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + ",event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
+        _headWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + ",position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_road,head_angle_to_road");
+        _controllerWriter.WriteLine(StudyCsvTime.TaskSessionTimeColumnsHeader + "," + ControllerTimeseriesLog.PoseColumnsHeader + "," + ControllerTimeseriesLog.ButtonColumnsHeader);
 
         _lastCsvFlushTime = Time.time;
         _timeseriesWriter.Flush();
@@ -972,12 +1030,11 @@ public class SC3bStreet : LevelScript
     {
         if (_timeseriesWriter == null)
             return;
-        string pCol = havePupilTs ? F(pupilTs) : "";
         string cCol = gazePacket ? F(conf) : "";
         _timeseriesWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             state.ToString(CultureInfo.InvariantCulture),
             cCol,
             valid.ToString(CultureInfo.InvariantCulture),
@@ -985,21 +1042,17 @@ public class SC3bStreet : LevelScript
             CsvEscape(hitTag),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz,
-            _gazeCsvParticipantGroup,
-            _gazeCsvParticipantId,
-            _gazeSessionId));
+            gwx, gwy, gwz));
     }
 
     void WriteEventRow(float sinceStart, bool havePupilTs, double pupilTs, float conf, int valid, string hitName, string hitTag, string invalidReason, string ev, string glx, string gly, string glz, string gyaw, string gpit, string gu, string gv, string gwx, string gwy, string gwz)
     {
         if (_eventsWriter == null)
             return;
-        string pCol = havePupilTs ? F(pupilTs) : "";
         _eventsWriter.WriteLine(string.Join(",",
-            F(sinceStart),
-            pCol,
-            F(Time.time),
+            StudyCsvTime.FormatSecondsAsMs(sinceStart),
+            StudyCsvTime.FormatOptionalPupilTimestampMs(havePupilTs, pupilTs),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
             CsvEscape(ev),
             F(conf),
             valid.ToString(CultureInfo.InvariantCulture),
@@ -1007,22 +1060,19 @@ public class SC3bStreet : LevelScript
             CsvEscape(hitTag),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz,
-            _gazeCsvParticipantGroup,
-            _gazeCsvParticipantId,
-            _gazeSessionId));
+            gwx, gwy, gwz));
     }
 
     void WriteSceneReferenceJsonFiles(string sessionDir)
     {
-        try
+        WriteSceneReferenceJsonOnce(sessionDir, () =>
         {
             var scene = SceneManager.GetActiveScene();
             var sb = new StringBuilder(1024);
             sb.Append('{');
             sb.Append("\"schema\":\"sc3b_scene_rois v1\",");
             sb.Append("\"unity_scene_name\":").Append(JsonString(scene.name)).Append(',');
-            sb.Append("\"unity_time_at_snapshot\":").Append(F(Time.time)).Append(',');
+            sb.Append("\"unity_time_ms_at_snapshot\":").Append(StudyCsvTime.FormatSecondsAsMs(Time.time)).Append(',');
             sb.Append("\"equirect_heatmap_columns\":").Append(JsonString("gaze_hmd_local_x,y,z; yaw_deg; pitch_deg; equirect_u,v; see VrGazeEquirectMetrics")).Append(',');
             AppendTransformBlock(sb, "road_anchor", GetRoadTransformForSnapshot());
             sb.Append(',');
@@ -1035,11 +1085,7 @@ public class SC3bStreet : LevelScript
             const string roiRoadTemplate = "{\"roi_name\":\"Road\",\"type\":\"polygon\",\"points\":[],\"note\":\"Left/Right road colliders tagged in scene; fill panorama ROI offline if needed.\"}";
             File.WriteAllText(Path.Combine(sessionDir, "roi_road.json"), roiRoadTemplate, new UTF8Encoding(false));
             LevelScript.WritePanoReferenceJson(sessionDir, scene.name);
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"SC3bStreet: failed to write scene ROI JSON ({e.Message})");
-        }
+        });
     }
 
     Transform GetRoadTransformForSnapshot()
@@ -1106,34 +1152,6 @@ public class SC3bStreet : LevelScript
         origin = pupilLocalToWorld.position;
         direction = pupilLocalToWorld.TransformDirection(gazeData.GazeDirection);
         return true;
-    }
-
-    static string BuildControllerButtonEvents(SteamVR_Input_Sources hand)
-    {
-        if (SteamVR.initializedState != SteamVR.InitializedStates.InitializeSuccess)
-            return "";
-
-        var sb = new StringBuilder(64);
-        AppendBoolEdges(sb, SteamVR_Actions.default_GrabPinch, hand, "grab_pinch");
-        AppendBoolEdges(sb, SteamVR_Actions.default_GrabGrip, hand, "grab_grip");
-        AppendBoolEdges(sb, SteamVR_Actions.default_InteractUI, hand, "interact_ui");
-        AppendBoolEdges(sb, SteamVR_Actions.default_Teleport, hand, "teleport");
-        AppendBoolEdges(sb, SteamVR_Actions.default_TouchpadClick, hand, "touchpad_click");
-        AppendBoolEdges(sb, SteamVR_Actions.default_SnapTurnLeft, hand, "snap_turn_left");
-        AppendBoolEdges(sb, SteamVR_Actions.default_SnapTurnRight, hand, "snap_turn_right");
-        if (sb.Length > 0 && sb[sb.Length - 1] == ';')
-            sb.Length -= 1;
-        return sb.ToString();
-    }
-
-    static void AppendBoolEdges(StringBuilder sb, SteamVR_Action_Boolean action, SteamVR_Input_Sources hand, string id)
-    {
-        if (action == null || !action.activeBinding)
-            return;
-        if (action.GetStateDown(hand))
-            sb.Append(id).Append("_down;");
-        if (action.GetStateUp(hand))
-            sb.Append(id).Append("_up;");
     }
 
     static Transform GetTrackingRigOrigin()

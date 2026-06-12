@@ -258,12 +258,17 @@ public class StudyFlowDebugSkip : MonoBehaviour
             SetLayerRecursive(t.GetChild(i).gameObject, layer);
     }
 
+    static Font _cachedUiFont;
+
     static Font UiFont()
     {
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null)
-            font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        return font;
+        if (_cachedUiFont != null)
+            return _cachedUiFont;
+
+        _cachedUiFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (_cachedUiFont == null)
+            _cachedUiFont = Font.CreateDynamicFontFromOSFont(new[] { "Arial", "Segoe UI", "Helvetica" }, 14);
+        return _cachedUiFont;
     }
 
     static GameObject CreatePanel(Transform parent, Vector2 anchoredPos, Vector2 anchorMin, Vector2 anchorMax, Vector2 size)
