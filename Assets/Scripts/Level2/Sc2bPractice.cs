@@ -165,8 +165,9 @@ public class Sc2bPractice : MonoBehaviour
     {
         if (CanvasText != null)
             CanvasText.text = "Practice completed. You will now start the main task.";
+        
         yield return new WaitForSeconds(3f);
-
+        camera.clearFlags = CameraClearFlags.SolidColor;
         this.gameObject.SetActive(false);
         GazeTracker.SetActive(true);
         Recorder.SetActive(true);

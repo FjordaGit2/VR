@@ -52,6 +52,8 @@ TagManager:
   - Lamp1
   - Lamp2
   - Lamp3
+  - Lecturer
+  - LectureLesson
   layers:
   - Default
   - TransparentFX
