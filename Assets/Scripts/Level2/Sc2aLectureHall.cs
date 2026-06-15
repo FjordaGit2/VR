@@ -859,7 +859,7 @@ public class Sc2aLectureHall : LevelScript
             cCol,
             valid.ToString(CultureInfo.InvariantCulture),
             CsvEscape(hitName),
-            CsvEscape(hitTag),
+            CsvEscape(LevelScript.FormatHitTagForCsv(valid, hitTag)),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
             gwx, gwy, gwz));
@@ -877,7 +877,7 @@ public class Sc2aLectureHall : LevelScript
             F(conf),
             valid.ToString(CultureInfo.InvariantCulture),
             CsvEscape(hitName),
-            CsvEscape(hitTag),
+            CsvEscape(LevelScript.FormatHitTagForCsv(valid, hitTag)),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
             gwx, gwy, gwz));

@@ -51,8 +51,8 @@ public class SC3aStreet : LevelScript
     [Tooltip("-1 = random seed each run; otherwise fixed for reproducibility.")]
     public int sequenceRandomSeed = -1;
     [Min(1)] public int maxSequenceShuffleAttempts = 5000;
-    [Tooltip("Avoid the same road side on consecutive trials when possible.")]
-    public bool avoidConsecutiveSameRoadSide = true;
+    [Tooltip("When true, reshuffles to reduce same road side on consecutive trials (with 50/50 sides this often forces L/R alternation).")]
+    public bool avoidConsecutiveSameRoadSide = false;
     [Tooltip("When shuffling car order within each road side, avoid the same prefab on consecutive trials in that side's list when possible.")]
     public bool avoidConsecutiveSameCarWithinRoadSide = true;
 
@@ -296,130 +296,17 @@ public class SC3aStreet : LevelScript
                 $"SC3aStreet: totalTrials ({totalTrials}) != trialsPerRoadSide×2 ({expectedTotalFromSides}). Adjust Inspector counts.");
         }
 
-        int seed = sequenceRandomSeed >= 0
-            ? sequenceRandomSeed
-            : UnityEngine.Random.Range(int.MinValue / 4, int.MaxValue / 4);
-        _loggedSequenceSeed = seed;
-        var rng = new System.Random(seed);
-
-        _trialRoadSides = BuildBalancedMultiset(0, trialsPerRoadSide, 1, trialsPerRoadSide);
-        Shuffle(_trialRoadSides, rng);
-        if (avoidConsecutiveSameRoadSide)
-            TryRemoveConsecutiveDuplicates(_trialRoadSides, rng);
-
-        _trialCarIndices = BuildTrialCarIndicesMergedWithRoadSides(prefabCount, rng);
-    }
-
-    /// <summary>
-    /// For each road side, build an evenly split multiset of car prefab indices, shuffle it,
-    /// then assign cars trial-by-trial according to the shuffled road-side sequence.
-    /// </summary>
-    List<int> BuildTrialCarIndicesMergedWithRoadSides(int prefabCount, System.Random rng)
-    {
-        var merged = new List<int>(_trialRoadSides.Count);
-        if (prefabCount < 1 || _trialRoadSides == null)
-            return merged;
-
-        var leftCars = BuildBalancedCarMultiset(prefabCount, trialsPerRoadSide);
-        var rightCars = BuildBalancedCarMultiset(prefabCount, trialsPerRoadSide);
-        Shuffle(leftCars, rng);
-        Shuffle(rightCars, rng);
-        if (avoidConsecutiveSameCarWithinRoadSide)
-        {
-            TryRemoveConsecutiveDuplicates(leftCars, rng);
-            TryRemoveConsecutiveDuplicates(rightCars, rng);
-        }
-
-        int leftUsed = 0;
-        int rightUsed = 0;
-        for (int t = 0; t < _trialRoadSides.Count; t++)
-        {
-            if (_trialRoadSides[t] == 0)
-            {
-                if (leftUsed >= leftCars.Count)
-                {
-                    Debug.LogError("SC3aStreet: ran out of left-road car assignments.");
-                    break;
-                }
-
-                merged.Add(leftCars[leftUsed++]);
-            }
-            else
-            {
-                if (rightUsed >= rightCars.Count)
-                {
-                    Debug.LogError("SC3aStreet: ran out of right-road car assignments.");
-                    break;
-                }
-
-                merged.Add(rightCars[rightUsed++]);
-            }
-        }
-
-        while (merged.Count < totalTrials)
-            merged.Add(rng.Next(prefabCount));
-        while (merged.Count > totalTrials)
-            merged.RemoveAt(merged.Count - 1);
-
-        return merged;
-    }
-
-    /// <summary>
-    /// Even split of <paramref name="prefabCount"/> car indices across <paramref name="trialCount"/> trials
-    /// (e.g. 150 trials, 4 cars → 38, 38, 37, 37).
-    /// </summary>
-    static List<int> BuildBalancedCarMultiset(int prefabCount, int trialCount)
-    {
-        var list = new List<int>(trialCount);
-        if (prefabCount < 1 || trialCount < 1)
-            return list;
-
-        int baseCount = trialCount / prefabCount;
-        int remainder = trialCount % prefabCount;
-        for (int c = 0; c < prefabCount; c++)
-        {
-            int n = baseCount + (c < remainder ? 1 : 0);
-            for (int i = 0; i < n; i++)
-                list.Add(c);
-        }
-
-        return list;
-    }
-
-    static List<int> BuildBalancedMultiset(int a, int countA, int b, int countB)
-    {
-        var list = new List<int>(countA + countB);
-        for (int i = 0; i < countA; i++)
-            list.Add(a);
-        for (int i = 0; i < countB; i++)
-            list.Add(b);
-        return list;
-    }
-
-    static void Shuffle(IList<int> list, System.Random rng)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = rng.Next(i + 1);
-            (list[i], list[j]) = (list[j], list[i]);
-        }
-    }
-
-    static bool HasConsecutiveDuplicates(IList<int> list)
-    {
-        for (int i = 1; i < list.Count; i++)
-        {
-            if (list[i] == list[i - 1])
-                return true;
-        }
-
-        return false;
-    }
-
-    static void TryRemoveConsecutiveDuplicates(IList<int> list, System.Random rng)
-    {
-        for (int attempt = 0; attempt < 5000 && HasConsecutiveDuplicates(list); attempt++)
-            Shuffle(list, rng);
+        var built = StudyTrialSequence.BuildSc3TrialSequences(
+            trialsPerRoadSide,
+            totalTrials,
+            prefabCount,
+            sequenceRandomSeed,
+            StudyTrialSequence.SeedSaltSc3aStreet,
+            avoidConsecutiveSameRoadSide,
+            avoidConsecutiveSameCarWithinRoadSide);
+        _loggedSequenceSeed = built.Seed;
+        _trialRoadSides = built.RoadSides;
+        _trialCarIndices = built.CarIndices;
     }
 
     IEnumerator RunTaskCoroutine()
@@ -1043,7 +930,7 @@ public class SC3aStreet : LevelScript
             cCol,
             valid.ToString(CultureInfo.InvariantCulture),
             CsvEscape(hitName),
-            CsvEscape(hitTag),
+            CsvEscape(LevelScript.FormatHitTagForCsv(valid, hitTag)),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
             gwx, gwy, gwz));
@@ -1061,7 +948,7 @@ public class SC3aStreet : LevelScript
             F(conf),
             valid.ToString(CultureInfo.InvariantCulture),
             CsvEscape(hitName),
-            CsvEscape(hitTag),
+            CsvEscape(LevelScript.FormatHitTagForCsv(valid, hitTag)),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
             gwx, gwy, gwz));

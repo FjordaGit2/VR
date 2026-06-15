@@ -86,6 +86,16 @@ public class LevelScript : MonoBehaviour
         return value;
     }
 
+    /// <summary>Maps Unity default/empty collider tags to <c>Else</c> in gaze CSV <c>hit_tag</c>.</summary>
+    public static string FormatHitTagForCsv(int valid, string hitTag)
+    {
+        if (valid != 1)
+            return hitTag ?? "";
+        if (string.IsNullOrWhiteSpace(hitTag) || hitTag == "Untagged")
+            return "Else";
+        return hitTag;
+    }
+
     /// <summary>Stub JSON: fill <c>pano_export</c> after you render one reference equirect in Unity (pose + image size) for offline gaze_world → pixel mapping.</summary>
     public static void WritePanoReferenceJson(string sessionDir, string unitySceneName)
     {

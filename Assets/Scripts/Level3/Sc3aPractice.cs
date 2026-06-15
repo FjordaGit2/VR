@@ -41,7 +41,8 @@ public class Sc3aPractice : MonoBehaviour
     [Header("Car movement")]
     [Min(0f)] public float carSpeed = 50f;
 
-    readonly List<int> mylist = new List<int>();
+    List<int> _practiceRoadSides;
+    List<int> _practiceCarIndices;
 
     int SpawnPosIndex;
     int count;
@@ -117,21 +118,11 @@ public class Sc3aPractice : MonoBehaviour
 
     void BuildPracticeRoadList()
     {
-        mylist.Clear();
-        mylist.Add(0);
-        mylist.Add(1);
-        mylist.Add(0);
-        mylist.Add(1);
-        mylist.Add(0);
-        mylist.Add(1);
-        mylist.Add(0);
-        mylist.Add(1);
-        mylist.Add(0);
-        mylist.Add(1);
-        while (mylist.Count > TotalCount)
-            mylist.RemoveAt(mylist.Count - 1);
-        while (mylist.Count < TotalCount)
-            mylist.Add(mylist.Count % 2);
+        int prefabCount = SpawnPrefabs != null ? SpawnPrefabs.Length : 1;
+        var built = StudyTrialSequence.BuildPracticeSequences(
+            TotalCount, prefabCount, StudyTrialSequence.SeedSaltSc3aPractice);
+        _practiceRoadSides = built.RoadSides;
+        _practiceCarIndices = built.CarIndices;
     }
 
     void buttonIsClicked()
@@ -156,7 +147,7 @@ public class Sc3aPractice : MonoBehaviour
 
         while (count < TotalCount && !_practiceFinished)
         {
-            if (mylist.Count == 0)
+            if (_practiceRoadSides == null || count >= _practiceRoadSides.Count)
                 break;
 
             SetLampActive(true);
@@ -164,12 +155,10 @@ public class Sc3aPractice : MonoBehaviour
             SetLampActive(false);
             yield return WaitMs(lampOffGapMs);
 
-            SpawnPosIndex = mylist[Random.Range(0, mylist.Count)];
-            mylist.Remove(SpawnPosIndex);
-
+            SpawnPosIndex = _practiceRoadSides[count];
             _responseWindowActive = true;
-            int carIndex = SpawnPrefabs != null && SpawnPrefabs.Length > 0
-                ? Random.Range(0, SpawnPrefabs.Length)
+            int carIndex = _practiceCarIndices != null && count < _practiceCarIndices.Count
+                ? _practiceCarIndices[count]
                 : 0;
             SpawnCar(SpawnPosIndex, carIndex);
 
