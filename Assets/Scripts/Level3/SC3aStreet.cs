@@ -528,6 +528,8 @@ public class SC3aStreet : LevelScript
             recorder.StopRecording();
         if (postBlockDelayBeforeNextSceneMs > 0)
             yield return WaitMs(postBlockDelayBeforeNextSceneMs);
+
+        Debug.Log("SC3aStreet: task complete — advancing to next scene.");
         NextScene();
     }
 

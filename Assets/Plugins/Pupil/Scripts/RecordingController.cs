@@ -109,14 +109,17 @@ namespace PupilLabs
                 return;
             }
 
+            IsRecording = false;
+            if (requestCtrl != null)
+                requestCtrl.OnDisconnecting -= StopRecording;
+
+            if (requestCtrl == null || !requestCtrl.IsConnected)
+                return;
+
             requestCtrl.Send(new Dictionary<string, object>
             {
                 { "subject", "recording.should_stop" }
             });
-
-            IsRecording = false;
-
-            requestCtrl.OnDisconnecting -= StopRecording;
         }
 
         public void SetCustomPath(string path)

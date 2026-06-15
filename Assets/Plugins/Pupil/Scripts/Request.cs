@@ -102,7 +102,12 @@ namespace PupilLabs
                 IsConnected = false;
             }
 
-            public void SendRequestMessage(Dictionary<string, object> data)
+        public void SendRequestMessage(Dictionary<string, object> data)
+        {
+            if (requestSocket == null)
+                return;
+
+            try
             {
                 NetMQMessage m = new NetMQMessage();
 
@@ -112,20 +117,33 @@ namespace PupilLabs
                 requestSocket.SendMultipartMessage(m);
                 ReceiveRequestResponse();
             }
-
-            public bool SendCommand(string cmd, out string response)
+            catch (Exception ex)
             {
-                if (requestSocket == null || !IsConnected)
-                {
-                    response = null;
-                    return false;
-                }
+                Debug.LogWarning($"Pupil request failed ({data?["subject"]}): {ex.Message}");
+                IsConnected = false;
+            }
+        }
 
+        public bool SendCommand(string cmd, out string response)
+        {
+            response = null;
+            if (requestSocket == null || !IsConnected)
+                return false;
+
+            try
+            {
                 requestSocket.SendFrame(cmd);
                 return requestSocket.TryReceiveFrameString(requestTimeout, out response);
             }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"Pupil command failed ({cmd}): {ex.Message}");
+                IsConnected = false;
+                return false;
+            }
+        }
 
-            private void ReceiveRequestResponse()
+        private void ReceiveRequestResponse()
             {
                 NetMQMessage m = new NetMQMessage();
                 requestSocket.TryReceiveMultipartMessage(requestTimeout, ref m);
