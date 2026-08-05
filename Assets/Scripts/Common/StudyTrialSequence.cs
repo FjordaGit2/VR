@@ -17,6 +17,8 @@ public static class StudyTrialSequence
     {
         public List<int> RoadSides;
         public List<int> CarIndices;
+        /// <summary>1 = police distractor on opposite road; 0 = target only. ~50% overall, balanced per road side.</summary>
+        public List<int> DistractorPresent;
         public int Seed;
     }
 
@@ -54,7 +56,15 @@ public static class StudyTrialSequence
             rng,
             avoidConsecutiveSameCarWithinRoadSide);
 
-        return new Sc3Sequences { RoadSides = roadSides, CarIndices = carIndices, Seed = seed };
+        var distractorPresent = BuildDistractorPresenceFlags(roadSides, rng);
+
+        return new Sc3Sequences
+        {
+            RoadSides = roadSides,
+            CarIndices = carIndices,
+            DistractorPresent = distractorPresent,
+            Seed = seed
+        };
     }
 
     public static Sc3Sequences BuildPracticeSequences(int totalTrials, int prefabCount, int sceneSalt)
@@ -76,7 +86,54 @@ public static class StudyTrialSequence
             rng,
             avoidConsecutiveSameCarWithinRoadSide: false);
 
-        return new Sc3Sequences { RoadSides = roadSides, CarIndices = carIndices, Seed = seed };
+        var distractorPresent = BuildDistractorPresenceFlags(roadSides, rng);
+
+        return new Sc3Sequences
+        {
+            RoadSides = roadSides,
+            CarIndices = carIndices,
+            DistractorPresent = distractorPresent,
+            Seed = seed
+        };
+    }
+
+    /// <summary>
+    /// Marks half of trials on each road side as distractor-present (shuffled),
+    /// so overall ~50% and balanced across left/right targets.
+    /// </summary>
+    public static List<int> BuildDistractorPresenceFlags(IList<int> roadSides, System.Random rng)
+    {
+        var flags = new List<int>(roadSides != null ? roadSides.Count : 0);
+        if (roadSides == null || roadSides.Count == 0)
+            return flags;
+
+        for (int i = 0; i < roadSides.Count; i++)
+            flags.Add(0);
+
+        var leftIdx = new List<int>();
+        var rightIdx = new List<int>();
+        for (int i = 0; i < roadSides.Count; i++)
+        {
+            if (roadSides[i] == RoadLeft)
+                leftIdx.Add(i);
+            else
+                rightIdx.Add(i);
+        }
+
+        MarkHalfOfIndices(leftIdx, flags, rng);
+        MarkHalfOfIndices(rightIdx, flags, rng);
+        return flags;
+    }
+
+    static void MarkHalfOfIndices(List<int> indices, IList<int> flags, System.Random rng)
+    {
+        if (indices == null || indices.Count == 0)
+            return;
+
+        Shuffle(indices, rng);
+        int n = indices.Count / 2;
+        for (int i = 0; i < n; i++)
+            flags[indices[i]] = 1;
     }
 
     static List<int> BuildMergedCarIndices(

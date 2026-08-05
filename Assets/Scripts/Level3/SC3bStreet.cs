@@ -17,6 +17,8 @@ public class SC3bStreet : LevelScript
 {
     [SerializeField] Transform[] SpawnPoses = null;
     [SerializeField] GameObject[] SpawnPrefabs = null;
+    [Tooltip("Police (or other) car spawned on the opposite road on ~50% of trials. Participants must ignore it.")]
+    [SerializeField] GameObject DistractorPrefab = null;
 
     [Space]
     [Header("Lamp cue")]
@@ -87,11 +89,13 @@ public class SC3bStreet : LevelScript
 
     List<int> _trialRoadSides;
     List<int> _trialCarIndices;
+    List<int> _trialDistractorPresent;
     int _loggedSequenceSeed;
 
     int _trialIndex;
     int _currentRoadSide;
     int _currentCarIndex;
+    int _currentDistractorPresent;
     float _carOnsetUnityTime;
     bool _responseWindowActive;
     bool _trialResponded;
@@ -286,6 +290,8 @@ public class SC3bStreet : LevelScript
 
         if (prefabCount < 1 || poseCount < 2)
             Debug.LogError("SC3bStreet: assign SpawnPrefabs (cars) and SpawnPoses (left/right).");
+        if (DistractorPrefab == null)
+            Debug.LogWarning("SC3bStreet: DistractorPrefab not assigned — distractor trials will skip spawning.");
 
         int expectedTotalFromSides = trialsPerRoadSide * 2;
         if (expectedTotalFromSides != totalTrials)
@@ -305,6 +311,7 @@ public class SC3bStreet : LevelScript
         _loggedSequenceSeed = built.Seed;
         _trialRoadSides = built.RoadSides;
         _trialCarIndices = built.CarIndices;
+        _trialDistractorPresent = built.DistractorPresent;
     }
 
     IEnumerator RunTaskCoroutine()
@@ -312,8 +319,9 @@ public class SC3bStreet : LevelScript
         if (preTaskDelayMs > 0)
             yield return WaitMs(preTaskDelayMs);
 
-        if (_trialRoadSides == null || _trialCarIndices == null
-            || _trialRoadSides.Count < totalTrials || _trialCarIndices.Count < totalTrials)
+        if (_trialRoadSides == null || _trialCarIndices == null || _trialDistractorPresent == null
+            || _trialRoadSides.Count < totalTrials || _trialCarIndices.Count < totalTrials
+            || _trialDistractorPresent.Count < totalTrials)
         {
             Debug.LogError("SC3bStreet: invalid trial sequences; aborting.");
             _csvSessionLogging = false;
@@ -325,6 +333,7 @@ public class SC3bStreet : LevelScript
         {
             _currentRoadSide = _trialRoadSides[_trialIndex];
             _currentCarIndex = _trialCarIndices[_trialIndex];
+            _currentDistractorPresent = _trialDistractorPresent[_trialIndex];
 
             SetLampActive(true);
             yield return WaitMs(lampOnDurationMs);
@@ -345,12 +354,17 @@ public class SC3bStreet : LevelScript
                 pupilOnset = _lastGaze.PupilTimestamp;
 
             SpawnCar(_currentRoadSide, _currentCarIndex);
+            if (_currentDistractorPresent == 1)
+                SpawnDistractorCar(OppositeRoadSide(_currentRoadSide));
 
             yield return WaitMs(carShowDurationMs);
 
             _responseWindowActive = false;
 
             string carShown = _currentRoadSide == 0 ? "Left" : "Right";
+            string distractorSide = _currentDistractorPresent == 1
+                ? (OppositeRoadSide(_currentRoadSide) == 0 ? "Left" : "Right")
+                : "";
             string arrowPressed = _trialResponded
                 ? (_trialPressedLeft == true ? "Left" : "Right")
                 : "";
@@ -392,6 +406,8 @@ public class SC3bStreet : LevelScript
                 unityOnset,
                 pupilOnset,
                 carShown,
+                _currentDistractorPresent,
+                distractorSide,
                 arrowPressed,
                 looked,
                 lookedAccuracyCode,
@@ -432,6 +448,21 @@ public class SC3bStreet : LevelScript
             .AddComponent<AutoCar>()
             .Set(showSec, carSpeed);
     }
+
+    void SpawnDistractorCar(int roadSideIndex)
+    {
+        if (DistractorPrefab == null || SpawnPoses == null || SpawnPoses.Length < 2)
+            return;
+        if (roadSideIndex < 0 || roadSideIndex >= SpawnPoses.Length)
+            roadSideIndex = 0;
+
+        float showSec = carShowDurationMs * 0.001f;
+        Instantiate(DistractorPrefab, SpawnPoses[roadSideIndex])
+            .AddComponent<AutoCar>()
+            .Set(showSec, carSpeed);
+    }
+
+    static int OppositeRoadSide(int roadSide) => roadSide == 0 ? 1 : 0;
 
     void SetLampActive(bool on)
     {
@@ -505,6 +536,8 @@ public class SC3bStreet : LevelScript
         double unityCarOnset,
         double pupilCarOnset,
         string carShown,
+        int distractorPresent,
+        string distractorSide,
         string arrowPressed,
         string looked,
         int lookedAccuracyCode,
@@ -530,6 +563,8 @@ public class SC3bStreet : LevelScript
                     "unity_time_ms_car_onset," +
                     "pupil_timestamp_ms_at_car_onset," +
                     "car_shown," +
+                    "distractor_present_0_no_1_yes," +
+                    "distractor_side," +
                     "arrow_pressed," +
                     "looked," +
                     "looked_accuracy_0_wrong_1_correct_2_else_3_no_gaze," +
@@ -558,6 +593,8 @@ public class SC3bStreet : LevelScript
             StudyCsvTime.FormatSecondsAsMs(unityCarOnset) + "," +
             StudyCsvTime.FormatOptionalTimestampCellMs(pupilCarOnset) + "," +
             CsvEscape(carShown) + "," +
+            distractorPresent.ToString(CultureInfo.InvariantCulture) + "," +
+            CsvEscape(distractorSide) + "," +
             CsvEscape(arrowPressed) + "," +
             CsvEscape(looked) + "," +
             lookedAccuracyCode.ToString(CultureInfo.InvariantCulture) + "," +

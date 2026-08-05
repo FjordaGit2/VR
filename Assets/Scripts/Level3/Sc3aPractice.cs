@@ -19,6 +19,8 @@ public class Sc3aPractice : MonoBehaviour
 
     [SerializeField] Transform[] SpawnPoses = null;
     [SerializeField] GameObject[] SpawnPrefabs = null;
+    [Tooltip("Police (or other) car spawned on the opposite road on ~50% of trials. Participants must ignore it.")]
+    [SerializeField] GameObject DistractorPrefab = null;
 
     [Space]
     [Header("Lamp cue (same structure as SC3aStreet)")]
@@ -43,6 +45,7 @@ public class Sc3aPractice : MonoBehaviour
 
     List<int> _practiceRoadSides;
     List<int> _practiceCarIndices;
+    List<int> _practiceDistractorPresent;
 
     int SpawnPosIndex;
     int count;
@@ -123,6 +126,7 @@ public class Sc3aPractice : MonoBehaviour
             TotalCount, prefabCount, StudyTrialSequence.SeedSaltSc3aPractice);
         _practiceRoadSides = built.RoadSides;
         _practiceCarIndices = built.CarIndices;
+        _practiceDistractorPresent = built.DistractorPresent;
     }
 
     void buttonIsClicked()
@@ -161,6 +165,12 @@ public class Sc3aPractice : MonoBehaviour
                 ? _practiceCarIndices[count]
                 : 0;
             SpawnCar(SpawnPosIndex, carIndex);
+            if (_practiceDistractorPresent != null
+                && count < _practiceDistractorPresent.Count
+                && _practiceDistractorPresent[count] == 1)
+            {
+                SpawnDistractorCar(SpawnPosIndex == 0 ? 1 : 0);
+            }
 
             yield return WaitMs(carShowDurationMs);
             _responseWindowActive = false;
@@ -200,6 +210,19 @@ public class Sc3aPractice : MonoBehaviour
             .Set(showSec, carSpeed);
     }
 
+    void SpawnDistractorCar(int roadSideIndex)
+    {
+        if (DistractorPrefab == null || SpawnPoses == null || SpawnPoses.Length < 2)
+            return;
+        if (roadSideIndex < 0 || roadSideIndex >= SpawnPoses.Length)
+            roadSideIndex = 0;
+
+        float showSec = carShowDurationMs * 0.001f;
+        Instantiate(DistractorPrefab, SpawnPoses[roadSideIndex])
+            .AddComponent<AutoCar>()
+            .Set(showSec, carSpeed);
+    }
+
     void SetLampActive(bool on)
     {
         if (lamp != null)
@@ -219,7 +242,7 @@ public class Sc3aPractice : MonoBehaviour
         if (PracticeCanvas != null)
             PracticeCanvas.enabled = true;
         if (CanvasText != null)
-            CanvasText.text = "Please start again. Make sure you press the corresponding correct direction in the rounded button of the controller depending where the car is shown.";
+            CanvasText.text = "Please start again. Make sure you press the corresponding correct direction in the rounded button of the controller depending where the target car is shown, and ignore the police car if it appears on the other road.";
         if (buttonStartPractice != null)
             buttonStartPractice.SetActive(true);
         praticeButtonIsClicked = false;
