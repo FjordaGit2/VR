@@ -54,6 +54,7 @@ TagManager:
   - Lamp3
   - Lecturer
   - LectureLesson
+  - car_distractor
   layers:
   - Default
   - TransparentFX

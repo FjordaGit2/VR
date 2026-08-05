@@ -340,7 +340,7 @@ GameObject:
   - component: {fileID: 114957717382174511}
   m_Layer: 8
   m_Name: Police_car
-  m_TagString: car
+  m_TagString: car_distractor
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
