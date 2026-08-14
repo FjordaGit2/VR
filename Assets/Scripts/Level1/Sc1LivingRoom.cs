@@ -674,12 +674,21 @@ public class Sc1LivingRoom : LevelScript
 
     IEnumerator EndTask()
     {
+        int advanceGen = StudySceneFlow.AdvanceGeneration;
+
         csvGazeLogging = false;
         CloseSessionCsvWriters();
 
         recorder.StopRecording();
         StartCoroutine(Post());
         yield return new WaitForSeconds(1);
+
+        // Skip (N) or another advance already left this scene — do not advance again.
+        if (advanceGen != StudySceneFlow.AdvanceGeneration)
+            yield break;
+        if (SceneManager.GetActiveScene().name != "Sc1LivingRoom")
+            yield break;
+
         NextScene();
     }
 }

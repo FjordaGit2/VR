@@ -13,13 +13,29 @@ public static class StudyTrialSequence
     public const int SeedSaltSc3aPractice = 391_011;
     public const int SeedSaltSc3bPractice = 392_011;
 
+    public const int TravelForward = 0;
+    public const int TravelReverse = 1;
+
     public struct Sc3Sequences
     {
         public List<int> RoadSides;
         public List<int> CarIndices;
         /// <summary>1 = police distractor on opposite road; 0 = target only. ~50% overall, balanced per road side.</summary>
         public List<int> DistractorPresent;
+        /// <summary>0 = forward spawn (SpawnPoses[0]/[1]); 1 = reverse spawn (SpawnPoses[2]/[3]). ~50%, balanced per road side.</summary>
+        public List<int> TravelDirections;
         public int Seed;
+    }
+
+    /// <summary>
+    /// SpawnPoses layout: [0]=left forward, [1]=right forward, [2]=left reverse, [3]=right reverse.
+    /// Falls back to forward poses when reverse slots are missing.
+    /// </summary>
+    public static int ResolveSpawnPoseIndex(int roadSide, int travelDirection, int spawnPoseCount)
+    {
+        int side = roadSide == RoadRight ? RoadRight : RoadLeft;
+        bool wantReverse = travelDirection == TravelReverse && spawnPoseCount >= 4;
+        return wantReverse ? side + 2 : side;
     }
 
     /// <summary>Independent per scene: fixed inspector seed is offset by <paramref name="sceneSalt"/>.</summary>
@@ -57,12 +73,14 @@ public static class StudyTrialSequence
             avoidConsecutiveSameCarWithinRoadSide);
 
         var distractorPresent = BuildDistractorPresenceFlags(roadSides, rng);
+        var travelDirections = BuildTravelDirectionFlags(roadSides, rng);
 
         return new Sc3Sequences
         {
             RoadSides = roadSides,
             CarIndices = carIndices,
             DistractorPresent = distractorPresent,
+            TravelDirections = travelDirections,
             Seed = seed
         };
     }
@@ -87,12 +105,14 @@ public static class StudyTrialSequence
             avoidConsecutiveSameCarWithinRoadSide: false);
 
         var distractorPresent = BuildDistractorPresenceFlags(roadSides, rng);
+        var travelDirections = BuildTravelDirectionFlags(roadSides, rng);
 
         return new Sc3Sequences
         {
             RoadSides = roadSides,
             CarIndices = carIndices,
             DistractorPresent = distractorPresent,
+            TravelDirections = travelDirections,
             Seed = seed
         };
     }
@@ -102,6 +122,20 @@ public static class StudyTrialSequence
     /// so overall ~50% and balanced across left/right targets.
     /// </summary>
     public static List<int> BuildDistractorPresenceFlags(IList<int> roadSides, System.Random rng)
+    {
+        return BuildBalancedBinaryFlagsPerRoadSide(roadSides, rng);
+    }
+
+    /// <summary>
+    /// Marks half of trials on each road side as reverse travel (shuffled),
+    /// so overall ~50% and balanced across left/right targets.
+    /// </summary>
+    public static List<int> BuildTravelDirectionFlags(IList<int> roadSides, System.Random rng)
+    {
+        return BuildBalancedBinaryFlagsPerRoadSide(roadSides, rng);
+    }
+
+    static List<int> BuildBalancedBinaryFlagsPerRoadSide(IList<int> roadSides, System.Random rng)
     {
         var flags = new List<int>(roadSides != null ? roadSides.Count : 0);
         if (roadSides == null || roadSides.Count == 0)

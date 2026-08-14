@@ -19,7 +19,7 @@ public class Sc3bPractice : MonoBehaviour
 
     [SerializeField] Transform[] SpawnPoses = null;
     [SerializeField] GameObject[] SpawnPrefabs = null;
-    [Tooltip("Police (or other) car spawned on the opposite road on ~50% of trials. Participants must ignore it.")]
+    [Tooltip("Police (or other) car spawned on the opposite road on ~50% of trials. Participants must ignore it and still respond to the target.")]
     [SerializeField] GameObject DistractorPrefab = null;
 
     [Space]
@@ -36,16 +36,17 @@ public class Sc3bPractice : MonoBehaviour
     [Min(0)] public int preTaskDelayMs = 1000;
     [Min(1)] public int lampOnDurationMs = 1000;
     [Min(0)] public int lampOffGapMs = 200;
-    [Min(1)] public int carShowDurationMs = 1000;
-    [Min(0)] public int interTrialIntervalMs = 1000;
+    [Min(1)] public int carShowDurationMs = 1200;
+    [Min(0)] public int interTrialIntervalMs = 800;
 
     [Space]
     [Header("Car movement")]
-    [Min(0f)] public float carSpeed = 50f;
+    [Min(0f)] public float carSpeed = 35f;
 
     List<int> _practiceRoadSides;
     List<int> _practiceCarIndices;
     List<int> _practiceDistractorPresent;
+    List<int> _practiceTravelDirections;
 
     int SpawnPosIndex;
     int count;
@@ -70,6 +71,11 @@ public class Sc3bPractice : MonoBehaviour
     public GameObject Recorder;
     public GameObject RightHand;
 
+    [Space]
+    [Header("PC test (no VR)")]
+    [Tooltip("If enabled, practice starts automatically on Play without clicking the VR canvas Start button. Leave OFF for real participants.")]
+    [SerializeField] bool autoStartOnPlayForPcTest = false;
+
     void Start()
     {
         if (Pointer != null)
@@ -78,6 +84,33 @@ public class Sc3bPractice : MonoBehaviour
             lamp.SetActive(false);
         if (StartPracticeBTNl != null)
             StartPracticeBTNl.onClick.AddListener(buttonIsClicked);
+        if (autoStartOnPlayForPcTest)
+            BeginPracticeForPcTest();
+    }
+
+    void BeginPracticeForPcTest()
+    {
+        // Street LevelScript sets timeScale=0 until its Start button; unfreeze for PC testing.
+        Time.timeScale = 1f;
+        AudioListener.volume = 1f;
+
+        if (PracticeCanvas != null)
+        {
+            PracticeCanvas.enabled = false;
+            PracticeCanvas.gameObject.SetActive(false);
+        }
+        if (buttonStartPractice != null)
+            buttonStartPractice.SetActive(false);
+        if (Pointer != null)
+            Pointer.SetActive(false);
+
+        praticeButtonIsClicked = true;
+        if (count2 == 0)
+        {
+            count2 = 1;
+            BuildPracticeRoadList();
+            StartPractice();
+        }
     }
 
     void Update()
@@ -127,6 +160,7 @@ public class Sc3bPractice : MonoBehaviour
         _practiceRoadSides = built.RoadSides;
         _practiceCarIndices = built.CarIndices;
         _practiceDistractorPresent = built.DistractorPresent;
+        _practiceTravelDirections = built.TravelDirections;
     }
 
     void buttonIsClicked()
@@ -164,12 +198,15 @@ public class Sc3bPractice : MonoBehaviour
             int carIndex = _practiceCarIndices != null && count < _practiceCarIndices.Count
                 ? _practiceCarIndices[count]
                 : 0;
-            SpawnCar(SpawnPosIndex, carIndex);
+            int travelDirection = _practiceTravelDirections != null && count < _practiceTravelDirections.Count
+                ? _practiceTravelDirections[count]
+                : StudyTrialSequence.TravelForward;
+            SpawnCar(SpawnPosIndex, carIndex, travelDirection);
             if (_practiceDistractorPresent != null
                 && count < _practiceDistractorPresent.Count
                 && _practiceDistractorPresent[count] == 1)
             {
-                SpawnDistractorCar(SpawnPosIndex == 0 ? 1 : 0);
+                SpawnDistractorCar(SpawnPosIndex == 0 ? 1 : 0, travelDirection);
             }
 
             yield return WaitMs(carShowDurationMs);
@@ -195,30 +232,38 @@ public class Sc3bPractice : MonoBehaviour
         }
     }
 
-    void SpawnCar(int roadSideIndex, int carPrefabIndex)
+    void SpawnCar(int roadSideIndex, int carPrefabIndex, int travelDirection)
     {
         if (SpawnPrefabs == null || SpawnPoses == null || SpawnPrefabs.Length == 0 || SpawnPoses.Length == 0)
             return;
         if (carPrefabIndex < 0 || carPrefabIndex >= SpawnPrefabs.Length)
             carPrefabIndex = 0;
-        if (roadSideIndex < 0 || roadSideIndex >= SpawnPoses.Length)
-            roadSideIndex = 0;
+        if (SpawnPrefabs[carPrefabIndex] == null)
+            return;
+
+        int poseIndex = StudyTrialSequence.ResolveSpawnPoseIndex(
+            roadSideIndex, travelDirection, SpawnPoses.Length);
+        if (poseIndex < 0 || poseIndex >= SpawnPoses.Length || SpawnPoses[poseIndex] == null)
+            return;
 
         float showSec = carShowDurationMs * 0.001f;
-        Instantiate(SpawnPrefabs[carPrefabIndex], SpawnPoses[roadSideIndex])
+        Instantiate(SpawnPrefabs[carPrefabIndex], SpawnPoses[poseIndex])
             .AddComponent<AutoCar>()
             .Set(showSec, carSpeed);
     }
 
-    void SpawnDistractorCar(int roadSideIndex)
+    void SpawnDistractorCar(int roadSideIndex, int travelDirection)
     {
         if (DistractorPrefab == null || SpawnPoses == null || SpawnPoses.Length < 2)
             return;
-        if (roadSideIndex < 0 || roadSideIndex >= SpawnPoses.Length)
-            roadSideIndex = 0;
+
+        int poseIndex = StudyTrialSequence.ResolveSpawnPoseIndex(
+            roadSideIndex, travelDirection, SpawnPoses.Length);
+        if (poseIndex < 0 || poseIndex >= SpawnPoses.Length || SpawnPoses[poseIndex] == null)
+            return;
 
         float showSec = carShowDurationMs * 0.001f;
-        Instantiate(DistractorPrefab, SpawnPoses[roadSideIndex])
+        Instantiate(DistractorPrefab, SpawnPoses[poseIndex])
             .AddComponent<AutoCar>()
             .Set(showSec, carSpeed);
     }

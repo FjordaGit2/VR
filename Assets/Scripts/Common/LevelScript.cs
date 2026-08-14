@@ -232,6 +232,10 @@ public class LevelScript : MonoBehaviour
 
         _sceneAdvanceLocked = true;
 
+        // Logged-in sessions must use the study order (never a stale build-index jump).
+        if (HasParticipantIdentity())
+            StudySceneFlow.EnsureSequenceActiveAtCurrentScene();
+
         if (StudySceneFlow.IsSequenceActive)
         {
             if (!StudySceneFlow.AdvanceToNextScene())

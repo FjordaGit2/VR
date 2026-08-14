@@ -45,9 +45,12 @@ public static class StudySceneFlow
 
     static int _stepIndex = -1;
     static bool _sequenceActive;
+    static int _advanceGeneration;
 
     public static bool IsSequenceActive => _sequenceActive;
     public static int StepIndex => _stepIndex;
+    /// <summary>Increments on every successful advance; task EndTask coroutines should abort if this changed.</summary>
+    public static int AdvanceGeneration => _advanceGeneration;
     public static StudySceneOrder Order { get; private set; } = StudySceneOrder.Forward_1_to_5;
 
     public enum StudySceneOrder
@@ -70,7 +73,30 @@ public static class StudySceneFlow
         if (_sceneSyncHookRegistered)
             return;
         _sceneSyncHookRegistered = true;
-        SceneManager.sceneLoaded += (_, __) => SyncStepIndexToActiveScene();
+        SceneManager.sceneLoaded += OnSceneLoaded;
+
+        // Initial scene may have loaded before this handler was subscribed.
+        if (SceneManager.GetActiveScene().name == SceneId)
+        {
+            _sequenceActive = false;
+            _stepIndex = -1;
+        }
+        else
+        {
+            SyncStepIndexToActiveScene();
+        }
+    }
+
+    static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name == SceneId)
+        {
+            // Fresh login screen — drop any stale step from a previous Play session.
+            _sequenceActive = false;
+            _stepIndex = -1;
+            return;
+        }
+
         SyncStepIndexToActiveScene();
     }
 
@@ -96,6 +122,27 @@ public static class StudySceneFlow
                 flat[index++] = blocks[b][s];
         }
         return flat;
+    }
+
+    static int IndexOfScene(IReadOnlyList<string> middle, string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName) || middle == null)
+            return -1;
+
+        for (int i = 0; i < middle.Count; i++)
+        {
+            if (string.Equals(middle[i], sceneName, StringComparison.Ordinal))
+                return i;
+        }
+
+        // Case-insensitive fallback (guards Build Settings / filename casing mismatches).
+        for (int i = 0; i < middle.Count; i++)
+        {
+            if (string.Equals(middle[i], sceneName, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
     }
 
     public static void SetOrderFromDropdownLabel(string label)
@@ -134,6 +181,7 @@ public static class StudySceneFlow
     {
         _sequenceActive = true;
         _stepIndex = 0;
+        _advanceGeneration++;
         LoadStep(_stepIndex);
     }
 
@@ -150,6 +198,30 @@ public static class StudySceneFlow
         Debug.Log($"StudySceneFlow: testing mode — order {GetOrderLabel()}, step {_stepIndex + 1}/{GetMiddleScenes().Count}, scene '{SceneManager.GetActiveScene().name}'.");
     }
 
+    /// <summary>
+    /// If the participant is logged in but the flow was never started (or was cleared),
+    /// resume at the active scene using the current order.
+    /// </summary>
+    public static void EnsureSequenceActiveAtCurrentScene()
+    {
+        if (_sequenceActive)
+        {
+            SyncStepIndexToActiveScene();
+            return;
+        }
+
+        string active = SceneManager.GetActiveScene().name;
+        if (active == SceneId || active == SceneEnd)
+            return;
+
+        if (IndexOfScene(GetMiddleScenes(), active) < 0)
+            return;
+
+        _sequenceActive = true;
+        SyncStepIndexToActiveScene();
+        Debug.Log($"StudySceneFlow: re-activated sequence at '{active}' (order {GetOrderLabel()}, step {_stepIndex + 1}/{GetMiddleScenes().Count}).");
+    }
+
     /// <summary>Keep step index aligned with the loaded scene (guards against duplicate NextScene calls).</summary>
     public static bool SyncStepIndexToActiveScene()
     {
@@ -160,18 +232,15 @@ public static class StudySceneFlow
         if (active == SceneId || active == SceneEnd)
             return false;
 
-        IReadOnlyList<string> middle = GetMiddleScenes();
-        for (int i = 0; i < middle.Count; i++)
+        int index = IndexOfScene(GetMiddleScenes(), active);
+        if (index < 0)
         {
-            if (string.Equals(middle[i], active, StringComparison.Ordinal))
-            {
-                _stepIndex = i;
-                return true;
-            }
+            Debug.LogWarning($"StudySceneFlow: scene '{active}' is not in order '{GetOrderLabel()}'.");
+            return false;
         }
 
-        Debug.LogWarning($"StudySceneFlow: scene '{active}' is not in order '{GetOrderLabel()}'.");
-        return false;
+        _stepIndex = index;
+        return true;
     }
 
     public static string GetNextSceneNamePreview()
@@ -179,8 +248,15 @@ public static class StudySceneFlow
         if (!_sequenceActive)
             return "(sequence inactive — build index + 1)";
 
-        int next = _stepIndex + 1;
         IReadOnlyList<string> middle = GetMiddleScenes();
+        string active = SceneManager.GetActiveScene().name;
+        int current = IndexOfScene(middle, active);
+        if (current < 0)
+            current = _stepIndex;
+
+        int next = current + 1;
+        if (next < 0)
+            return "(unknown)";
         if (next >= middle.Count)
             return SceneEnd;
         return middle[next];
@@ -193,7 +269,10 @@ public static class StudySceneFlow
             return $"Flow: OFF | Scene: {active} | Next: build+1";
 
         IReadOnlyList<string> middle = GetMiddleScenes();
-        int stepNum = _stepIndex >= 0 ? _stepIndex + 1 : 0;
+        int current = IndexOfScene(middle, active);
+        if (current < 0)
+            current = _stepIndex;
+        int stepNum = current >= 0 ? current + 1 : 0;
         return $"Order: {GetOrderLabel()} | Step {stepNum}/{middle.Count} | {active} | Next: {GetNextSceneNamePreview()}";
     }
 
@@ -207,18 +286,32 @@ public static class StudySceneFlow
             return true;
         }
 
-        SyncStepIndexToActiveScene();
+        string active = SceneManager.GetActiveScene().name;
+        IReadOnlyList<string> middle = GetMiddleScenes();
+        int current = IndexOfScene(middle, active);
+        if (current < 0)
+        {
+            Debug.LogError(
+                $"StudySceneFlow: cannot advance — active scene '{active}' is not in order '{GetOrderLabel()}'. " +
+                $"Stale step index was {_stepIndex}; refusing to load End from a stale index.");
+            return false;
+        }
 
-        _stepIndex++;
-        if (_stepIndex >= GetMiddleScenes().Count)
+        _stepIndex = current;
+        int next = current + 1;
+        _advanceGeneration++;
+
+        if (next >= middle.Count)
         {
             _sequenceActive = false;
-            Debug.Log($"StudySceneFlow: study complete — loading '{SceneEnd}'.");
+            _stepIndex = next;
+            Debug.Log($"StudySceneFlow: '{active}' is the last scene in '{GetOrderLabel()}' — loading '{SceneEnd}'.");
             SceneManager.LoadScene(SceneEnd);
             return true;
         }
 
-        return LoadStep(_stepIndex);
+        _stepIndex = next;
+        return LoadStep(next);
     }
 
     static bool LoadStep(int middleIndex)
@@ -239,7 +332,8 @@ public static class StudySceneFlow
             return false;
         }
 
-        Debug.Log($"StudySceneFlow: loading '{sceneName}' (order {GetOrderLabel()}, step {middleIndex + 1}/{middle.Count}). Next after that: {GetNextSceneNamePreview()}");
+        string after = middleIndex + 1 < middle.Count ? middle[middleIndex + 1] : SceneEnd;
+        Debug.Log($"StudySceneFlow: loading '{sceneName}' (order {GetOrderLabel()}, step {middleIndex + 1}/{middle.Count}). Next after that: {after}");
         SceneManager.LoadScene(sceneName);
         return true;
     }

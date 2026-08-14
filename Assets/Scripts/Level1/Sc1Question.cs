@@ -22,7 +22,8 @@ public class Sc1Question : MonoBehaviour
     {
         if (BtSubmit != null)
         {
-            BtSubmit.onClick.RemoveAllListeners();
+            // Replace the event so Inspector persistent Submit calls cannot double-fire NextScene.
+            BtSubmit.onClick = new Button.ButtonClickedEvent();
             BtSubmit.onClick.AddListener(Submit);
         }
         Validate();
@@ -38,15 +39,12 @@ public class Sc1Question : MonoBehaviour
     {
         if (_submitting)
             return;
+        _submitting = true;
         StartCoroutine(SaveAnswersLocally());
     }
 
     IEnumerator SaveAnswersLocally()
     {
-        if (_submitting)
-            yield break;
-        _submitting = true;
-
         if (BtSubmit != null)
             BtSubmit.interactable = false;
 

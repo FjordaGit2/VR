@@ -17,7 +17,7 @@ public class SC3bStreet : LevelScript
 {
     [SerializeField] Transform[] SpawnPoses = null;
     [SerializeField] GameObject[] SpawnPrefabs = null;
-    [Tooltip("Police (or other) car spawned on the opposite road on ~50% of trials. Participants must ignore it.")]
+    [Tooltip("Police (or other) car spawned on the opposite road on ~50% of trials. Participants must ignore it and still respond to the target.")]
     [SerializeField] GameObject DistractorPrefab = null;
 
     [Space]
@@ -37,14 +37,14 @@ public class SC3bStreet : LevelScript
     [Min(0)] public int preTaskDelayMs = 1000;
     [Min(1)] public int lampOnDurationMs = 1000;
     [Min(0)] public int lampOffGapMs = 200;
-    [Min(1)] public int carShowDurationMs = 1000;
-    [Min(0)] public int interTrialIntervalMs = 1000;
+    [Min(1)] public int carShowDurationMs = 1200;
+    [Min(0)] public int interTrialIntervalMs = 800;
     [Min(0)] public int postBlockDelayBeforeNextSceneMs = 2000;
 
     [Space]
     [Header("Car movement")]
     [Tooltip("Forward speed while the car is visible (world units per second).")]
-    [Min(0f)] public float carSpeed = 50f;
+    [Min(0f)] public float carSpeed = 35f;
 
     [Space]
     [Header("Sequence")]
@@ -81,6 +81,12 @@ public class SC3bStreet : LevelScript
     [Min(0.5f)] public float csvFlushIntervalSeconds = 2f;
     [Range(0f, 1f)] public float triggerPressThreshold = 0.5f;
 
+    [Space]
+    [Header("PC test (no VR)")]
+    [Tooltip("If enabled, main task starts automatically without clicking the VR canvas Start button. Leave OFF for real participants.")]
+    [SerializeField] bool autoStartOnPlayForPcTest = false;
+    bool _pcTestAutoStartRequested;
+
     const int StateRoadTarget = 1;
     const int StateNotRoadTarget = 0;
     const int StateInvalid = -1;
@@ -90,12 +96,14 @@ public class SC3bStreet : LevelScript
     List<int> _trialRoadSides;
     List<int> _trialCarIndices;
     List<int> _trialDistractorPresent;
+    List<int> _trialTravelDirections;
     int _loggedSequenceSeed;
 
     int _trialIndex;
     int _currentRoadSide;
     int _currentCarIndex;
     int _currentDistractorPresent;
+    int _currentTravelDirection;
     float _carOnsetUnityTime;
     bool _responseWindowActive;
     bool _trialResponded;
@@ -183,7 +191,21 @@ public class SC3bStreet : LevelScript
 
     void Update()
     {
-        if (ConsumeStartButtonForTask())
+        if (autoStartOnPlayForPcTest && !_pcTestAutoStartRequested && !isStarted)
+        {
+            _pcTestAutoStartRequested = true;
+            if (TaskCanvas != null)
+            {
+                TaskCanvas.enabled = false;
+                TaskCanvas.gameObject.SetActive(false);
+            }
+            StartTask();
+            if (recorder != null)
+                recorder.StartRecording();
+            if (Pointer != null)
+                Pointer.SetActive(false);
+        }
+        else if (ConsumeStartButtonForTask())
         {
             StartTask();
             if (recorder != null)
@@ -290,6 +312,8 @@ public class SC3bStreet : LevelScript
 
         if (prefabCount < 1 || poseCount < 2)
             Debug.LogError("SC3bStreet: assign SpawnPrefabs (cars) and SpawnPoses (left/right).");
+        if (poseCount < 4)
+            Debug.LogWarning("SC3bStreet: SpawnPoses needs 4 entries [leftFwd, rightFwd, leftRev, rightRev] for bidirectional travel; reverse trials will fall back to forward poses.");
         if (DistractorPrefab == null)
             Debug.LogWarning("SC3bStreet: DistractorPrefab not assigned — distractor trials will skip spawning.");
 
@@ -312,6 +336,7 @@ public class SC3bStreet : LevelScript
         _trialRoadSides = built.RoadSides;
         _trialCarIndices = built.CarIndices;
         _trialDistractorPresent = built.DistractorPresent;
+        _trialTravelDirections = built.TravelDirections;
     }
 
     IEnumerator RunTaskCoroutine()
@@ -320,8 +345,10 @@ public class SC3bStreet : LevelScript
             yield return WaitMs(preTaskDelayMs);
 
         if (_trialRoadSides == null || _trialCarIndices == null || _trialDistractorPresent == null
+            || _trialTravelDirections == null
             || _trialRoadSides.Count < totalTrials || _trialCarIndices.Count < totalTrials
-            || _trialDistractorPresent.Count < totalTrials)
+            || _trialDistractorPresent.Count < totalTrials
+            || _trialTravelDirections.Count < totalTrials)
         {
             Debug.LogError("SC3bStreet: invalid trial sequences; aborting.");
             _csvSessionLogging = false;
@@ -334,6 +361,7 @@ public class SC3bStreet : LevelScript
             _currentRoadSide = _trialRoadSides[_trialIndex];
             _currentCarIndex = _trialCarIndices[_trialIndex];
             _currentDistractorPresent = _trialDistractorPresent[_trialIndex];
+            _currentTravelDirection = _trialTravelDirections[_trialIndex];
 
             SetLampActive(true);
             yield return WaitMs(lampOnDurationMs);
@@ -353,15 +381,18 @@ public class SC3bStreet : LevelScript
             if (_lastGaze != null)
                 pupilOnset = _lastGaze.PupilTimestamp;
 
-            SpawnCar(_currentRoadSide, _currentCarIndex);
+            SpawnCar(_currentRoadSide, _currentCarIndex, _currentTravelDirection);
             if (_currentDistractorPresent == 1)
-                SpawnDistractorCar(OppositeRoadSide(_currentRoadSide));
+                SpawnDistractorCar(OppositeRoadSide(_currentRoadSide), _currentTravelDirection);
 
             yield return WaitMs(carShowDurationMs);
 
             _responseWindowActive = false;
 
             string carShown = _currentRoadSide == 0 ? "Left" : "Right";
+            string travelDirection = _currentTravelDirection == StudyTrialSequence.TravelReverse
+                ? "Reverse"
+                : "Forward";
             string distractorSide = _currentDistractorPresent == 1
                 ? (OppositeRoadSide(_currentRoadSide) == 0 ? "Left" : "Right")
                 : "";
@@ -406,6 +437,7 @@ public class SC3bStreet : LevelScript
                 unityOnset,
                 pupilOnset,
                 carShown,
+                travelDirection,
                 _currentDistractorPresent,
                 distractorSide,
                 arrowPressed,
@@ -427,37 +459,60 @@ public class SC3bStreet : LevelScript
 
         if (recorder != null)
             recorder.StopRecording();
+
+        int advanceGen = StudySceneFlow.AdvanceGeneration;
         if (postBlockDelayBeforeNextSceneMs > 0)
             yield return WaitMs(postBlockDelayBeforeNextSceneMs);
+        if (advanceGen != StudySceneFlow.AdvanceGeneration)
+            yield break;
+        if (SceneManager.GetActiveScene().name != "SC3BStreet")
+            yield break;
 
         Debug.Log("SC3bStreet: task complete — advancing to next scene.");
         NextScene();
     }
 
-    void SpawnCar(int roadSideIndex, int carPrefabIndex)
+    void SpawnCar(int roadSideIndex, int carPrefabIndex, int travelDirection)
     {
         if (SpawnPrefabs == null || SpawnPoses == null)
             return;
         if (carPrefabIndex < 0 || carPrefabIndex >= SpawnPrefabs.Length)
             carPrefabIndex = 0;
-        if (roadSideIndex < 0 || roadSideIndex >= SpawnPoses.Length)
-            roadSideIndex = 0;
+        if (SpawnPrefabs[carPrefabIndex] == null)
+        {
+            Debug.LogError($"SC3bStreet: SpawnPrefabs[{carPrefabIndex}] is null — skipping target spawn.");
+            return;
+        }
+
+        int poseIndex = StudyTrialSequence.ResolveSpawnPoseIndex(
+            roadSideIndex, travelDirection, SpawnPoses.Length);
+        if (poseIndex < 0 || poseIndex >= SpawnPoses.Length || SpawnPoses[poseIndex] == null)
+        {
+            Debug.LogError($"SC3bStreet: missing SpawnPoses[{poseIndex}] — skipping target spawn.");
+            return;
+        }
 
         float showSec = carShowDurationMs * 0.001f;
-        Instantiate(SpawnPrefabs[carPrefabIndex], SpawnPoses[roadSideIndex])
+        Instantiate(SpawnPrefabs[carPrefabIndex], SpawnPoses[poseIndex])
             .AddComponent<AutoCar>()
             .Set(showSec, carSpeed);
     }
 
-    void SpawnDistractorCar(int roadSideIndex)
+    void SpawnDistractorCar(int roadSideIndex, int travelDirection)
     {
         if (DistractorPrefab == null || SpawnPoses == null || SpawnPoses.Length < 2)
             return;
-        if (roadSideIndex < 0 || roadSideIndex >= SpawnPoses.Length)
-            roadSideIndex = 0;
+
+        int poseIndex = StudyTrialSequence.ResolveSpawnPoseIndex(
+            roadSideIndex, travelDirection, SpawnPoses.Length);
+        if (poseIndex < 0 || poseIndex >= SpawnPoses.Length || SpawnPoses[poseIndex] == null)
+        {
+            Debug.LogWarning($"SC3bStreet: missing SpawnPoses[{poseIndex}] — skipping distractor spawn.");
+            return;
+        }
 
         float showSec = carShowDurationMs * 0.001f;
-        Instantiate(DistractorPrefab, SpawnPoses[roadSideIndex])
+        Instantiate(DistractorPrefab, SpawnPoses[poseIndex])
             .AddComponent<AutoCar>()
             .Set(showSec, carSpeed);
     }
@@ -536,6 +591,7 @@ public class SC3bStreet : LevelScript
         double unityCarOnset,
         double pupilCarOnset,
         string carShown,
+        string travelDirection,
         int distractorPresent,
         string distractorSide,
         string arrowPressed,
@@ -563,6 +619,7 @@ public class SC3bStreet : LevelScript
                     "unity_time_ms_car_onset," +
                     "pupil_timestamp_ms_at_car_onset," +
                     "car_shown," +
+                    "travel_direction," +
                     "distractor_present_0_no_1_yes," +
                     "distractor_side," +
                     "arrow_pressed," +
@@ -593,6 +650,7 @@ public class SC3bStreet : LevelScript
             StudyCsvTime.FormatSecondsAsMs(unityCarOnset) + "," +
             StudyCsvTime.FormatOptionalTimestampCellMs(pupilCarOnset) + "," +
             CsvEscape(carShown) + "," +
+            CsvEscape(travelDirection) + "," +
             distractorPresent.ToString(CultureInfo.InvariantCulture) + "," +
             CsvEscape(distractorSide) + "," +
             CsvEscape(arrowPressed) + "," +

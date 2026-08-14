@@ -236,6 +236,11 @@ public class StudyFlowDebugSkip : MonoBehaviour
             return;
 
         _advancing = true;
+
+        // Skip must follow study order when a participant is logged in (or after F/B).
+        if (LevelScript.HasParticipantIdentity() || StudySceneFlow.IsSequenceActive)
+            StudySceneFlow.EnsureSequenceActiveAtCurrentScene();
+
         Debug.Log("StudyFlowDebugSkip: " + StudySceneFlow.GetDebugStatusLine());
         LevelScript.NextScene();
         StartCoroutine(UnlockIfSceneDidNotChange());

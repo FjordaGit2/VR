@@ -456,8 +456,15 @@ public class Sc2aLectureHall : LevelScript
 
         if (recorder != null)
             recorder.StopRecording();
+
+        int advanceGen = StudySceneFlow.AdvanceGeneration;
         if (postBlockDelayBeforeNextSceneSeconds > 0f)
             yield return new WaitForSeconds(postBlockDelayBeforeNextSceneSeconds);
+        if (advanceGen != StudySceneFlow.AdvanceGeneration)
+            yield break;
+        if (SceneManager.GetActiveScene().name != StudySceneFlow.SceneSc2aLectureHall)
+            yield break;
+
         NextScene();
     }
 
