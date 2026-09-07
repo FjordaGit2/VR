@@ -39,19 +39,84 @@ public class Sc2aPractice : MonoBehaviour
     public GameObject Recorder;
     public GameObject RightHand;
 
-
-
+    [Space]
+    [Header("PC test (no VR)")]
+    [Tooltip("If enabled, practice starts automatically on Play without clicking the VR canvas Start button. Leave OFF for real participants.")]
+    [SerializeField] bool autoStartOnPlayForPcTest = false;
 
     void Start()
     {
-        Pointer.SetActive(true);
+        if (Pointer != null)
+            Pointer.SetActive(true);
+        if (StartPracticeBTNl != null)
+            StartPracticeBTNl.onClick.AddListener(buttonIsClicked);
+        if (autoStartOnPlayForPcTest)
+            BeginPracticeForPcTest();
+    }
+
+    void BeginPracticeForPcTest()
+    {
+        // Lecture LevelScript sets timeScale=0 until its Start button; unfreeze for PC testing.
+        Time.timeScale = 1f;
+        AudioListener.volume = 1f;
+
+        if (PracticeCanvas != null)
+        {
+            PracticeCanvas.enabled = false;
+            PracticeCanvas.gameObject.SetActive(false);
+        }
+        if (buttonStartPractice != null)
+            buttonStartPractice.SetActive(false);
+        if (Pointer != null)
+            Pointer.SetActive(false);
+
+        praticeButtonIsClicked = true;
+        if (count2 == 0)
+        {
+            count2 = 1;
+            BuildPracticeDigitList();
+            StartPractice();
+        }
+    }
+
+    void BuildPracticeDigitList()
+    {
+        mylist.Clear();
+        mylist.Add(1);
+        mylist.Add(2);
+        mylist.Add(3);
+        mylist.Add(4);
+        mylist.Add(5);
+        mylist.Add(6);
+        mylist.Add(7);
+        mylist.Add(3);
+        mylist.Add(8);
+        mylist.Add(9);
+        mylist.Add(1);
+        mylist.Add(2);
+        mylist.Add(3);
+        mylist.Add(4);
+        mylist.Add(5);
+        mylist.Add(6);
+        mylist.Add(7);
+        mylist.Add(3);
+        mylist.Add(8);
+        mylist.Add(9);
+        mylist.Add(1);
+        mylist.Add(2);
+        mylist.Add(3);
+        mylist.Add(4);
+        mylist.Add(5);
+        mylist.Add(6);
+        mylist.Add(7);
+        mylist.Add(3);
+        mylist.Add(8);
+        mylist.Add(9);
     }
 
     // Update is called once per frame
     void Update()
     {
-        StartPracticeBTNl.onClick.AddListener(buttonIsClicked);
-        
         if (praticeButtonIsClicked)
         {
             count2++;
@@ -59,37 +124,7 @@ public class Sc2aPractice : MonoBehaviour
             if (count2 == 1) {
 
 
-                mylist.Clear();
-                mylist.Add(1);
-                mylist.Add(2);
-                mylist.Add(3);
-                mylist.Add(4);
-                mylist.Add(5);
-                mylist.Add(6);
-                mylist.Add(7);
-                mylist.Add(3);
-                mylist.Add(8);
-                mylist.Add(9);
-                mylist.Add(1);
-                mylist.Add(2);
-                mylist.Add(3);
-                mylist.Add(4);
-                mylist.Add(5);
-                mylist.Add(6);
-                mylist.Add(7);
-                mylist.Add(3);
-                mylist.Add(8);
-                mylist.Add(9);
-                mylist.Add(1);
-                mylist.Add(2);
-                mylist.Add(3);
-                mylist.Add(4);
-                mylist.Add(5);
-                mylist.Add(6);
-                mylist.Add(7);
-                mylist.Add(3);
-                mylist.Add(8);
-                mylist.Add(9);
+                BuildPracticeDigitList();
                 StartPractice();
                 Pointer.SetActive(false);
                 buttonStartPractice.SetActive(false);

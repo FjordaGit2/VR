@@ -81,6 +81,12 @@ public class Sc2bLectureHall : LevelScript
     [Range(0f, 1f)]
     public float triggerPressThreshold = 0.5f;
 
+    [Space]
+    [Header("PC test (no VR)")]
+    [Tooltip("If enabled, main task starts automatically without clicking the VR canvas Start button. Leave OFF for real participants.")]
+    [SerializeField] bool autoStartOnPlayForPcTest = false;
+    bool _pcTestAutoStartRequested;
+
     StreamWriter timeseriesWriter;
     StreamWriter eventsWriter;
     StreamWriter headWriter;
@@ -166,7 +172,21 @@ public class Sc2bLectureHall : LevelScript
 
     void Update()
     {
-        if (ConsumeStartButtonForTask())
+        if (autoStartOnPlayForPcTest && !_pcTestAutoStartRequested && !isStarted)
+        {
+            _pcTestAutoStartRequested = true;
+            if (TaskCanvas != null)
+            {
+                TaskCanvas.enabled = false;
+                TaskCanvas.gameObject.SetActive(false);
+            }
+            StartTask();
+            if (recorder != null)
+                recorder.StartRecording();
+            if (Pointer != null)
+                Pointer.SetActive(false);
+        }
+        else if (ConsumeStartButtonForTask())
         {
             StartTask();
             if (recorder != null)

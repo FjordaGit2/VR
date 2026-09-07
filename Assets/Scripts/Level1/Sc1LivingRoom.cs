@@ -49,6 +49,17 @@ public class Sc1LivingRoom : LevelScript
     [Range(0f, 1f)]
     public float triggerPressThreshold = 0.5f;
 
+    [Space]
+    [Header("PC test (no VR)")]
+    [Tooltip("If enabled, main task starts automatically without clicking the VR canvas Start button. Leave OFF for real participants.")]
+    [SerializeField] bool autoStartOnPlayForPcTest = false;
+    bool _pcTestAutoStartRequested;
+
+    [Space]
+    [Header("Julie avatar")]
+    [Tooltip("Optional. If empty, finds PlayAnimation on the JulieAvatar-tagged object.")]
+    [SerializeField] PlayAnimation julieHeadTurn;
+
     StreamWriter timeseriesWriter;
     StreamWriter eventsWriter;
     StreamWriter headWriter;
@@ -104,7 +115,21 @@ public class Sc1LivingRoom : LevelScript
 
     void Update()
     {
-        if (ConsumeStartButtonForTask())
+        if (autoStartOnPlayForPcTest && !_pcTestAutoStartRequested && !isStarted)
+        {
+            _pcTestAutoStartRequested = true;
+            if (TaskCanvas != null)
+            {
+                TaskCanvas.enabled = false;
+                TaskCanvas.gameObject.SetActive(false);
+            }
+            StartTask();
+            if (recorder != null)
+                recorder.StartRecording();
+            if (Pointer != null)
+                Pointer.SetActive(false);
+        }
+        else if (ConsumeStartButtonForTask())
         {
             StartTask();
             recorder.StartRecording();
@@ -665,6 +690,11 @@ public class Sc1LivingRoom : LevelScript
         video.Play();
         foreach (var a in audios)
             a.Play();
+
+        if (julieHeadTurn == null)
+            julieHeadTurn = FindObjectOfType<PlayAnimation>();
+        if (julieHeadTurn != null)
+            julieHeadTurn.BeginLookingSchedule();
     }
 
     void buttonIsClicked()
@@ -678,6 +708,9 @@ public class Sc1LivingRoom : LevelScript
 
         csvGazeLogging = false;
         CloseSessionCsvWriters();
+
+        if (julieHeadTurn != null)
+            julieHeadTurn.StopLookingSchedule();
 
         recorder.StopRecording();
         StartCoroutine(Post());
