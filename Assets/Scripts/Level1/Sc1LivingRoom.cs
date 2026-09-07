@@ -64,6 +64,7 @@ public class Sc1LivingRoom : LevelScript
     StreamWriter eventsWriter;
     StreamWriter headWriter;
     StreamWriter controllerWriter;
+    StreamWriter julieSpeechEventsWriter;
     float videoStartUnityTime;
     float lastCsvFlushTime;
     bool csvGazeLogging;
@@ -78,6 +79,13 @@ public class Sc1LivingRoom : LevelScript
     float headLastLinSpeed;
     float headLastAngSpeed;
     int headKinTickCount;
+
+    int _julieSpeechOnsetIndex;
+    float _julieSpeechOnsetSinceVideo;
+    float _julieSpeechOnsetUnityTime;
+    string _julieSpeechClipName;
+    bool _julieSpeechEventOpen;
+    bool _julieSpeechHooksBound;
 
     const int StateTv = 1;
     const int StateNotTv = 0;
@@ -109,6 +117,7 @@ public class Sc1LivingRoom : LevelScript
 
     void OnDestroy()
     {
+        UnbindJulieSpeechHooks();
         CloseSessionCsvWriters();
         recorder.StopRecording();
     }
@@ -330,7 +339,8 @@ public class Sc1LivingRoom : LevelScript
             F(accelAngular),
             F(angularSpeed),
             distCol,
-            angCol));
+            angCol,
+            JulieSpeaking01()));
 
         if (headMotionPrimed)
         {
@@ -399,7 +409,8 @@ public class Sc1LivingRoom : LevelScript
             F(euler.x), F(euler.y), F(euler.z),
             F(vLin),
             F(vAng),
-            ControllerTimeseriesLog.FormatButtonColumns(buttons)));
+            ControllerTimeseriesLog.FormatButtonColumns(buttons),
+            JulieSpeaking01()));
     }
 
     static Transform GetTrackingRigOrigin()
@@ -555,7 +566,8 @@ public class Sc1LivingRoom : LevelScript
             CsvEscape(LevelScript.FormatHitTagForCsv(valid, hitTag)),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz));
+            gwx, gwy, gwz,
+            JulieSpeaking01()));
     }
 
     void WriteEventRow(float sinceVideo, bool havePupilTs, double pupilTs, float conf, int valid, string hitName, string hitTag, string invalidReason, string ev, string glx, string gly, string glz, string gyaw, string gpit, string gu, string gv, string gwx, string gwy, string gwz)
@@ -573,12 +585,13 @@ public class Sc1LivingRoom : LevelScript
             CsvEscape(LevelScript.FormatHitTagForCsv(valid, hitTag)),
             CsvEscape(invalidReason),
             glx, gly, glz, gyaw, gpit, gu, gv,
-            gwx, gwy, gwz));
+            gwx, gwy, gwz,
+            JulieSpeaking01()));
     }
 
     void MaybePeriodicFlushCsv()
     {
-        if (timeseriesWriter == null && eventsWriter == null && headWriter == null && controllerWriter == null)
+        if (timeseriesWriter == null && eventsWriter == null && headWriter == null && controllerWriter == null && julieSpeechEventsWriter == null)
             return;
         if (Time.time - lastCsvFlushTime < csvFlushIntervalSeconds)
             return;
@@ -587,6 +600,59 @@ public class Sc1LivingRoom : LevelScript
         eventsWriter?.Flush();
         headWriter?.Flush();
         controllerWriter?.Flush();
+        julieSpeechEventsWriter?.Flush();
+    }
+
+    string JulieSpeaking01()
+    {
+        return julieHeadTurn != null && julieHeadTurn.IsSpeaking ? "1" : "0";
+    }
+
+    void BindJulieSpeechHooks()
+    {
+        if (julieHeadTurn == null || _julieSpeechHooksBound)
+            return;
+        julieHeadTurn.SpeechStarted += OnJulieSpeechStarted;
+        julieHeadTurn.SpeechEnded += OnJulieSpeechEnded;
+        _julieSpeechHooksBound = true;
+    }
+
+    void UnbindJulieSpeechHooks()
+    {
+        if (julieHeadTurn == null || !_julieSpeechHooksBound)
+            return;
+        julieHeadTurn.SpeechStarted -= OnJulieSpeechStarted;
+        julieHeadTurn.SpeechEnded -= OnJulieSpeechEnded;
+        _julieSpeechHooksBound = false;
+    }
+
+    void OnJulieSpeechStarted(int speechIndex, string clipName)
+    {
+        _julieSpeechOnsetIndex = speechIndex;
+        _julieSpeechOnsetSinceVideo = Time.time - videoStartUnityTime;
+        _julieSpeechOnsetUnityTime = Time.time;
+        _julieSpeechClipName = clipName ?? "";
+        _julieSpeechEventOpen = true;
+    }
+
+    void OnJulieSpeechEnded(int speechIndex)
+    {
+        if (!_julieSpeechEventOpen || julieSpeechEventsWriter == null)
+        {
+            _julieSpeechEventOpen = false;
+            return;
+        }
+
+        float offsetSinceVideo = Time.time - videoStartUnityTime;
+        julieSpeechEventsWriter.WriteLine(string.Join(",",
+            speechIndex.ToString(CultureInfo.InvariantCulture),
+            StudyCsvTime.FormatSecondsAsMs(_julieSpeechOnsetSinceVideo),
+            StudyCsvTime.FormatSecondsAsMs(_julieSpeechOnsetUnityTime),
+            StudyCsvTime.FormatSecondsAsMs(offsetSinceVideo),
+            StudyCsvTime.FormatSecondsAsMs(Time.time),
+            CsvEscape(_julieSpeechClipName)));
+        julieSpeechEventsWriter.Flush();
+        _julieSpeechEventOpen = false;
     }
 
     void OpenSessionCsvWriters()
@@ -599,21 +665,28 @@ public class Sc1LivingRoom : LevelScript
         eventsWriter = new StreamWriter(Path.Combine(dir, "gaze_events.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         headWriter = new StreamWriter(Path.Combine(dir, "head_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
         controllerWriter = new StreamWriter(Path.Combine(dir, "controller_timeseries.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
+        julieSpeechEventsWriter = new StreamWriter(Path.Combine(dir, "julie_speech_events.csv"), false, new UTF8Encoding(false)) { AutoFlush = false };
 
-        timeseriesWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
-        eventsWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z");
-        headWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_tv,head_angle_to_tv");
-        controllerWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + "," + ControllerTimeseriesLog.PoseColumnsHeader + "," + ControllerTimeseriesLog.ButtonColumnsHeader);
+        const string julieSpeakingCol = ",julie_speaking";
+        timeseriesWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",state,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z" + julieSpeakingCol);
+        eventsWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",event,confidence,valid,hit_name,hit_tag,invalid_reason,gaze_hmd_local_x,gaze_hmd_local_y,gaze_hmd_local_z,yaw_deg,pitch_deg,equirect_u,equirect_v,gaze_world_x,gaze_world_y,gaze_world_z" + julieSpeakingCol);
+        headWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + ",position_x,position_y,position_z,rotation_x,rotation_y,rotation_z,forward_x,forward_y,forward_z,up_x,up_y,up_z,vel_x,vel_y,vel_z,linear_speed,accel_lin_vec_mag,accel_linear,accel_angular,angular_speed,head_distance_to_tv,head_angle_to_tv" + julieSpeakingCol);
+        controllerWriter.WriteLine(StudyCsvTime.VideoSessionTimeColumnsHeader + "," + ControllerTimeseriesLog.PoseColumnsHeader + "," + ControllerTimeseriesLog.ButtonColumnsHeader + julieSpeakingCol);
+        julieSpeechEventsWriter.WriteLine("speech_index,onset_time_since_video_ms,onset_unity_time_ms,offset_time_since_video_ms,offset_unity_time_ms,clip_name");
 
         lastCsvFlushTime = Time.time;
         timeseriesWriter.Flush();
         eventsWriter.Flush();
         headWriter.Flush();
         controllerWriter.Flush();
+        julieSpeechEventsWriter.Flush();
     }
 
     void CloseSessionCsvWriters()
     {
+        if (_julieSpeechEventOpen)
+            OnJulieSpeechEnded(_julieSpeechOnsetIndex);
+
         if (timeseriesWriter != null)
         {
             timeseriesWriter.Flush();
@@ -640,6 +713,13 @@ public class Sc1LivingRoom : LevelScript
             controllerWriter.Flush();
             controllerWriter.Dispose();
             controllerWriter = null;
+        }
+
+        if (julieSpeechEventsWriter != null)
+        {
+            julieSpeechEventsWriter.Flush();
+            julieSpeechEventsWriter.Dispose();
+            julieSpeechEventsWriter = null;
         }
     }
 
@@ -693,6 +773,7 @@ public class Sc1LivingRoom : LevelScript
 
         if (julieHeadTurn == null)
             julieHeadTurn = FindObjectOfType<PlayAnimation>();
+        BindJulieSpeechHooks();
         if (julieHeadTurn != null)
             julieHeadTurn.BeginLookingSchedule();
     }
@@ -707,10 +788,11 @@ public class Sc1LivingRoom : LevelScript
         int advanceGen = StudySceneFlow.AdvanceGeneration;
 
         csvGazeLogging = false;
-        CloseSessionCsvWriters();
 
         if (julieHeadTurn != null)
             julieHeadTurn.StopLookingSchedule();
+        UnbindJulieSpeechHooks();
+        CloseSessionCsvWriters();
 
         recorder.StopRecording();
         StartCoroutine(Post());
