@@ -255,6 +255,10 @@ public class Sc2bLectureHall : LevelScript
             WriteSceneReferenceJsonFiles(LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2bLectureHall));
         _csvSessionLogging = true;
 
+        var lecture = FindObjectOfType<AnimAndImage>();
+        if (lecture != null)
+            lecture.BeginLecture();
+
         StartCoroutine(RunTaskCoroutine());
     }
 
@@ -309,32 +313,167 @@ public class Sc2bLectureHall : LevelScript
             return multiset;
         }
 
+        for (int attempt = 0; attempt < Mathf.Max(64, maxSequenceShuffleAttempts / 200); attempt++)
+        {
+            var built = BuildStratumBalancedSequence(rng);
+            if (built != null && PassesConstraints(built))
+            {
+                success = true;
+                return built;
+            }
+        }
+
         for (int attempt = 0; attempt < maxSequenceShuffleAttempts; attempt++)
         {
             Shuffle(multiset, rng);
             if (PassesConstraints(multiset))
             {
                 success = true;
-                return multiset;
+                return new List<int>(multiset);
             }
         }
 
-        for (int repair = 0; repair < 80000; repair++)
+        var seq = BuildStratumBalancedSequence(rng) ?? new List<int>(multiset);
+        for (int repair = 0; repair < 250000; repair++)
         {
-            int i = rng.Next(multiset.Count);
-            int j = rng.Next(multiset.Count);
-            if (i == j)
-                continue;
-            (multiset[i], multiset[j]) = (multiset[j], multiset[i]);
-            if (PassesConstraints(multiset))
+            if (PassesConstraints(seq))
             {
                 success = true;
-                return multiset;
+                return seq;
+            }
+
+            int i = rng.Next(seq.Count);
+            int j = rng.Next(seq.Count);
+            if (i == j)
+                continue;
+            (seq[i], seq[j]) = (seq[j], seq[i]);
+        }
+
+        success = PassesConstraints(seq);
+        return seq;
+    }
+
+    List<int> BuildStratumBalancedSequence(System.Random rng)
+    {
+        var fillers = new List<int>(Mathf.Max(0, totalTrials - noGoTrialCount));
+        for (int d = 1; d <= 9; d++)
+        {
+            if (d == noGoDigit)
+                continue;
+            for (int i = 0; i < trialsPerGoDigit; i++)
+                fillers.Add(d);
+        }
+        Shuffle(fillers, rng);
+
+        var seq = new int[totalTrials];
+        var noGoSlots = new HashSet<int>();
+
+        if (totalTrials % targetStrataCount == 0 && noGoTrialCount % targetStrataCount == 0 && noGoTrialCount > 0)
+        {
+            int stratumSize = totalTrials / targetStrataCount;
+            int expectedNoGo = noGoTrialCount / targetStrataCount;
+            for (int s = 0; s < targetStrataCount; s++)
+            {
+                int start = s * stratumSize;
+                for (int t = 0; t < expectedNoGo; t++)
+                {
+                    int slot = start + (t * stratumSize + stratumSize / 2) / expectedNoGo;
+                    slot = Mathf.Clamp(slot, start, start + stratumSize - 1);
+                    int guard = 0;
+                    while (guard++ < stratumSize &&
+                           (noGoSlots.Contains(slot) || noGoSlots.Contains(slot - 1) || noGoSlots.Contains(slot + 1)))
+                    {
+                        slot++;
+                        if (slot >= start + stratumSize)
+                            slot = start;
+                    }
+                    noGoSlots.Add(slot);
+                }
+            }
+        }
+        else if (noGoTrialCount > 0)
+        {
+            for (int t = 0; t < noGoTrialCount; t++)
+            {
+                int slot = (int)((t * (long)totalTrials) / noGoTrialCount);
+                if (slot >= totalTrials)
+                    slot = totalTrials - 1;
+                int guard = 0;
+                while (guard++ < totalTrials &&
+                       (noGoSlots.Contains(slot) || noGoSlots.Contains(slot - 1) || noGoSlots.Contains(slot + 1)))
+                {
+                    slot = (slot + 1) % totalTrials;
+                }
+                noGoSlots.Add(slot);
             }
         }
 
-        success = false;
-        return multiset;
+        int f = 0;
+        for (int i = 0; i < totalTrials; i++)
+        {
+            if (noGoSlots.Contains(i))
+                seq[i] = noGoDigit;
+            else if (f < fillers.Count)
+                seq[i] = fillers[f++];
+            else
+                seq[i] = noGoDigit;
+        }
+
+        for (int pass = 0; pass < 24; pass++)
+        {
+            bool changed = false;
+            for (int i = 0; i < seq.Length - 1; i++)
+            {
+                if (seq[i] != seq[i + 1])
+                    continue;
+                for (int j = i + 2; j < seq.Length; j++)
+                {
+                    if (seq[j] == seq[i + 1])
+                        continue;
+                    if (i > 0 && seq[j] == seq[i - 1])
+                        continue;
+                    if (j + 1 < seq.Length && seq[i + 1] == seq[j + 1])
+                        continue;
+                    (seq[i + 1], seq[j]) = (seq[j], seq[i + 1]);
+                    changed = true;
+                    break;
+                }
+            }
+
+            if (minMonotonicRunLength >= 3)
+            {
+                for (int i = 0; i + minMonotonicRunLength - 1 < seq.Length; i++)
+                {
+                    bool asc = true, desc = true;
+                    for (int k = 1; k < minMonotonicRunLength; k++)
+                    {
+                        if (seq[i + k] != seq[i + k - 1] + 1)
+                            asc = false;
+                        if (seq[i + k] != seq[i + k - 1] - 1)
+                            desc = false;
+                    }
+                    if (!asc && !desc)
+                        continue;
+
+                    int mid = i + minMonotonicRunLength / 2;
+                    for (int j = 0; j < seq.Length; j++)
+                    {
+                        if (j >= i && j < i + minMonotonicRunLength)
+                            continue;
+                        if (Mathf.Abs(seq[j] - seq[mid]) <= 1)
+                            continue;
+                        (seq[mid], seq[j]) = (seq[j], seq[mid]);
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!changed)
+                break;
+        }
+
+        return new List<int>(seq);
     }
 
     bool PassesConstraints(List<int> seq)
@@ -475,6 +614,10 @@ public class Sc2bLectureHall : LevelScript
 
         if (recorder != null)
             recorder.StopRecording();
+
+        var lecture = FindObjectOfType<AnimAndImage>();
+        if (lecture != null)
+            lecture.StopLecture();
 
         int advanceGen = StudySceneFlow.AdvanceGeneration;
         if (postBlockDelayBeforeNextSceneSeconds > 0f)
