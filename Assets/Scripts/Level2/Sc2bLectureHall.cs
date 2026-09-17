@@ -143,6 +143,7 @@ public class Sc2bLectureHall : LevelScript
         }
 
         ValidateAndBuildSequence();
+        ApplyWorldSpatialAudio();
     }
 
     void OnEnable()

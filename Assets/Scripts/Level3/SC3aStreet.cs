@@ -164,6 +164,7 @@ public class SC3aStreet : LevelScript
         }
 
         ValidateAndBuildSequences();
+        ApplyWorldSpatialAudio();
     }
 
     void OnEnable()

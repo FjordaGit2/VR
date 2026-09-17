@@ -159,6 +159,25 @@ public class LevelScript : MonoBehaviour
             Debug.LogWarning($"WriteSceneReferenceJsonOnce failed: {e.Message}");
         }
     }
+    /// <summary>
+    /// Unity Spatial Blend 3D from each source's world position. Skips UI canvas sources.
+    /// </summary>
+    protected void ApplyWorldSpatialAudio()
+    {
+        var sources = FindObjectsOfType<AudioSource>(true);
+        for (int i = 0; i < sources.Length; i++)
+        {
+            AudioSource source = sources[i];
+            if (source == null)
+                continue;
+            if (source.GetComponentInParent<Canvas>() != null)
+                continue;
+
+            source.spatialBlend = 1f;
+            source.dopplerLevel = 0f;
+        }
+    }
+
     void Start()
     {
         StartBTN.onClick.AddListener(buttonIsClicked);

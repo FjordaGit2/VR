@@ -96,6 +96,7 @@ public class Sc1LivingRoom : LevelScript
     void Awake()
     {
         recorder.customPath = LevelScript.GetEyeTrackingPath(LevelScript.DataFolderSc1LivingRoom);
+        ApplyWorldSpatialAudio();
     }
 
     private void OnEnable()
