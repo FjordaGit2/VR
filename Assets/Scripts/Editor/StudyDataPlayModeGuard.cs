@@ -19,6 +19,7 @@ static class StudyDataPlayModeGuard
         {
             case PlayModeStateChange.EnteredPlayMode:
                 AssetDatabase.DisallowAutoRefresh();
+
                 break;
             case PlayModeStateChange.ExitingPlayMode:
                 AssetDatabase.AllowAutoRefresh();
