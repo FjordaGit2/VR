@@ -17793,7 +17793,7 @@ MonoBehaviour:
   max: {fileID: 4025737097521258088}
   george: {fileID: 7974720426028692595}
   john: {fileID: 2463088216395462312}
-  autoStartLectureOnPlay: 1
+  autoStartLectureOnPlay: 0
 --- !u!4 &1800335020
 Transform:
   m_ObjectHideFlags: 0
