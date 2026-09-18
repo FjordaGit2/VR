@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 public static class AssignLectureLessonAssets
 {
-    const string ImagesFolder = "Assets/Static/Sc2LectureHall/Images";
+    const string ImagesFolder = "Assets/Sc2LectureHall/Images";
     const string AudiosFolder = "Assets/Additional Audios";
 
     // Matched to recorded Additional Audios lengths (1.mp3–14.mp3).

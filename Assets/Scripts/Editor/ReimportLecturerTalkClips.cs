@@ -9,10 +9,10 @@ public static class ReimportLecturerTalkClips
     {
         string[] paths =
         {
-            "Assets/Static/Sc2LectureHall/3DCharacters/LecturerAnim1.fbx",
-            "Assets/Static/Sc2LectureHall/3DCharacters/LecturerAnim2.fbx",
-            "Assets/Static/Sc2LectureHall/3DCharacters/LecturerAnim3.fbx",
-            "Assets/Static/Sc2LectureHall/3DCharacters/LecturerAnim4.fbx",
+            "Assets/Sc2LectureHall/3DCharacters/LecturerAnim1.fbx",
+            "Assets/Sc2LectureHall/3DCharacters/LecturerAnim2.fbx",
+            "Assets/Sc2LectureHall/3DCharacters/LecturerAnim3.fbx",
+            "Assets/Sc2LectureHall/3DCharacters/LecturerAnim4.fbx",
         };
 
         for (int i = 0; i < paths.Length; i++)
