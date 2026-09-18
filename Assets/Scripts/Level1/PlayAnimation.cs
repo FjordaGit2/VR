@@ -46,6 +46,9 @@ public class PlayAnimation : MonoBehaviour
         551f,
     };
 
+    /// <summary>Julie's spoken-line AudioSource (for session recording boost).</summary>
+    public AudioSource VoiceAudioSource => voiceSource;
+
     /// <summary>True while a Julie voice clip is actively playing.</summary>
     public bool IsSpeaking { get; private set; }
 

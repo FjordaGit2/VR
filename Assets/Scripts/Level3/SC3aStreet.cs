@@ -89,6 +89,11 @@ public class SC3aStreet : LevelScript
     [SerializeField] bool autoStartOnPlayForPcTest = false;
     bool _pcTestAutoStartRequested;
 
+    [Space]
+    [Header("Session video (in-Unity recorder)")]
+    [Tooltip("If on, saves an MP4 of the camera view + in-task game audio under Assets/Screen Recordings (Editor Play Mode; not the PC mic). Turn off for real participants unless consented.")]
+    [SerializeField] bool enableSessionRecording = false;
+
     const int StateRoadTarget = 1;
     const int StateNotRoadTarget = 0;
     const int StateInvalid = -1;
@@ -190,6 +195,7 @@ public class SC3aStreet : LevelScript
         CloseSessionCsvWriters();
         if (recorder != null)
             recorder.StopRecording();
+        StopSessionRecordingIfNeeded();
     }
 
     void Update()
@@ -305,7 +311,29 @@ public class SC3aStreet : LevelScript
         }
 
         _csvSessionLogging = true;
+        StartSessionRecordingIfEnabled("Sc3a");
         StartCoroutine(RunTaskCoroutine());
+    }
+
+    void StartSessionRecordingIfEnabled(string label)
+    {
+        if (!enableSessionRecording)
+            return;
+        VrSessionRecorder rec = VrSessionRecorder.Instance;
+        if (rec == null)
+            rec = FindObjectOfType<VrSessionRecorder>();
+        if (rec == null)
+        {
+            var go = new GameObject("VrSessionRecorder");
+            rec = go.AddComponent<VrSessionRecorder>();
+        }
+        rec.StartRecording(label);
+    }
+
+    void StopSessionRecordingIfNeeded()
+    {
+        if (VrSessionRecorder.Instance != null)
+            VrSessionRecorder.Instance.StopRecording();
     }
 
     void ValidateAndBuildSequences()
@@ -462,6 +490,7 @@ public class SC3aStreet : LevelScript
 
         if (recorder != null)
             recorder.StopRecording();
+        StopSessionRecordingIfNeeded();
 
         int advanceGen = StudySceneFlow.AdvanceGeneration;
         if (postBlockDelayBeforeNextSceneMs > 0)

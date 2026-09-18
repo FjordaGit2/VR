@@ -41,7 +41,7 @@ public class Sc2aLectureHall : LevelScript
 
     [Space]
     [Header("Block timing")]
-    [Min(0f)] public float preTaskDelaySeconds = 3f;
+    [Min(0f)] public float preTaskDelaySeconds = 1f;
     [Min(0f)] public float postBlockDelayBeforeNextSceneSeconds = 2f;
 
     [Space]
@@ -88,6 +88,11 @@ public class Sc2aLectureHall : LevelScript
     [Tooltip("If enabled, main task starts automatically without clicking the VR canvas Start button. Leave OFF for real participants.")]
     [SerializeField] bool autoStartOnPlayForPcTest = false;
     bool _pcTestAutoStartRequested;
+
+    [Space]
+    [Header("Session video (in-Unity recorder)")]
+    [Tooltip("If on, saves an MP4 of the camera view + in-task game audio under Assets/Screen Recordings (Editor Play Mode; not the PC mic). Turn off for real participants unless consented.")]
+    [SerializeField] bool enableSessionRecording = false;
 
     StreamWriter timeseriesWriter;
     StreamWriter eventsWriter;
@@ -257,11 +262,65 @@ public class Sc2aLectureHall : LevelScript
             WriteSceneReferenceJsonFiles(LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc2LectureHall));
         _csvSessionLogging = true;
 
-        var lecture = FindObjectOfType<AnimAndImage>();
-        if (lecture != null)
-            lecture.BeginLecture();
+        BeginLectureIfPresent();
+        StartSessionRecordingIfEnabled("Sc2a");
 
         StartCoroutine(RunTaskCoroutine());
+    }
+
+    static void BeginLectureIfPresent()
+    {
+        AnimAndImage lecture = FindConfiguredAnimAndImage();
+        if (lecture == null)
+        {
+            Debug.LogWarning("Sc2aLectureHall: no AnimAndImage found; lecture will not start.");
+            return;
+        }
+
+        if (!lecture.gameObject.activeSelf)
+            lecture.gameObject.SetActive(true);
+        lecture.BeginLecture();
+    }
+
+    static AnimAndImage FindConfiguredAnimAndImage()
+    {
+        // Include inactive: older setups hid James (and AnimAndImage on him) before Start.
+        var all = Resources.FindObjectsOfTypeAll<AnimAndImage>();
+        AnimAndImage fallback = null;
+        for (int i = 0; i < all.Length; i++)
+        {
+            AnimAndImage a = all[i];
+            if (a == null)
+                continue;
+            // Skip assets/prefabs not in a loaded scene.
+            if (!a.gameObject.scene.IsValid() || !a.gameObject.scene.isLoaded)
+                continue;
+            fallback = a;
+            if (a.lessonVoiceClips != null && a.lessonVoiceClips.Length > 0 && a.lessonVoiceClips[0] != null)
+                return a;
+        }
+        return fallback;
+    }
+
+    void StartSessionRecordingIfEnabled(string label)
+    {
+        if (!enableSessionRecording)
+            return;
+        VrSessionRecorder rec = VrSessionRecorder.Instance;
+        if (rec == null)
+            rec = FindObjectOfType<VrSessionRecorder>();
+        if (rec == null)
+        {
+            var go = new GameObject("VrSessionRecorder");
+            rec = go.AddComponent<VrSessionRecorder>();
+        }
+        rec.StartRecording(label);
+    }
+
+    void StopSessionRecordingIfNeeded()
+    {
+        if (VrSessionRecorder.Instance != null)
+            VrSessionRecorder.Instance.StopRecording();
     }
 
     void ValidateAndBuildSequence()
@@ -624,9 +683,11 @@ public class Sc2aLectureHall : LevelScript
         if (recorder != null)
             recorder.StopRecording();
 
-        var lecture = FindObjectOfType<AnimAndImage>();
+        var lecture = FindConfiguredAnimAndImage();
         if (lecture != null)
             lecture.StopLecture();
+
+        StopSessionRecordingIfNeeded();
 
         int advanceGen = StudySceneFlow.AdvanceGeneration;
         if (postBlockDelayBeforeNextSceneSeconds > 0f)

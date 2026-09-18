@@ -128,18 +128,26 @@ public class AnimAndImage : MonoBehaviour
 
         CacheLecturerHomePose();
 
-        // Keep lecturer hidden until the main task starts the lecture.
-        if (lecturerRoot != null)
-            lecturerRoot.SetActive(false);
-        else if (anim != null)
-            anim.gameObject.SetActive(false);
+        // James stays visible once LectureHallA/B is enabled after calibration,
+        // but talking/voice wait for BeginLecture (task Start button).
+        SetLecturerAvatarVisible(true);
+        SetLecturerTalkingEnabled(false);
 
-        ShowSlide(0, playVoice: false);
-        ResetStudentAnimators();
-        _studentRoutine = StartCoroutine(StudentAnimationLoop());
+        if (!IsLecturing)
+        {
+            ShowSlide(0, playVoice: false);
+            ResetStudentAnimators();
+            if (_studentRoutine == null)
+                _studentRoutine = StartCoroutine(StudentAnimationLoop());
 
-        if (autoStartLectureOnPlay)
-            BeginLecture();
+            if (autoStartLectureOnPlay)
+                BeginLecture();
+        }
+        else if (_studentRoutine == null)
+        {
+            ResetStudentAnimators();
+            _studentRoutine = StartCoroutine(StudentAnimationLoop());
+        }
     }
 
     void LateUpdate()
@@ -152,7 +160,57 @@ public class AnimAndImage : MonoBehaviour
 
     void OnDisable()
     {
-        StopLecture();
+        if (IsLecturing)
+            StopLecture();
+    }
+
+    /// <summary>
+    /// Shows/hides the lecturer. If this script is on the lecturer root, toggles renderers
+    /// instead of SetActive so AnimAndImage stays alive for StartTask → BeginLecture.
+    /// </summary>
+    void SetLecturerAvatarVisible(bool visible)
+    {
+        GameObject root = lecturerRoot != null ? lecturerRoot : (anim != null ? anim.gameObject : null);
+        if (root == null)
+            return;
+
+        if (root == gameObject)
+        {
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+                renderers[i].enabled = visible;
+            return;
+        }
+
+        root.SetActive(visible);
+    }
+
+    /// <summary>Freeze James pose until the task Start button begins the lecture.</summary>
+    void SetLecturerTalkingEnabled(bool enabled)
+    {
+        if (anim == null && lecturerRoot != null)
+            anim = lecturerRoot.GetComponentInChildren<Animator>(true);
+        if (anim == null)
+            anim = GetComponent<Animator>();
+        if (anim == null)
+            return;
+
+        ClearJamesAnimBools();
+        if (!enabled)
+        {
+            anim.applyRootMotion = false;
+            anim.speed = 0f;
+            // Hold first frame of default / idle-looking state without cycling talk clips.
+            anim.Play("JamesTalking1", 0, 0f);
+            anim.Update(0f);
+        }
+        else
+        {
+            anim.enabled = true;
+            anim.applyRootMotion = false;
+            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            anim.speed = Mathf.Clamp(lecturerAnimSpeed, 0.25f, 1f);
+        }
     }
 
     void CacheLecturerHomePose()
@@ -222,27 +280,26 @@ public class AnimAndImage : MonoBehaviour
         if (!_lecturerHomeCached)
             CacheLecturerHomePose();
 
+        SetLecturerAvatarVisible(true);
+
         if (lecturerRoot != null)
         {
-            lecturerRoot.SetActive(true);
-            // Re-cache after enable so we lock the intended stand pose, not a disabled preview pose.
+            if (!lecturerRoot.activeSelf)
+                lecturerRoot.SetActive(true);
             CacheLecturerHomePose();
             lecturerRoot.transform.position = _lecturerHomePosition;
             lecturerRoot.transform.rotation = _lecturerHomeRotation;
         }
-        else if (anim != null)
+        else if (anim != null && !anim.gameObject.activeSelf)
         {
             anim.gameObject.SetActive(true);
         }
 
         if (anim == null && lecturerRoot != null)
             anim = lecturerRoot.GetComponentInChildren<Animator>(true);
+        SetLecturerTalkingEnabled(true);
         if (anim != null)
         {
-            anim.enabled = true;
-            anim.applyRootMotion = false;
-            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-            anim.speed = Mathf.Clamp(lecturerAnimSpeed, 0.25f, 1f);
             anim.Rebind();
             anim.Update(0f);
         }
@@ -272,8 +329,9 @@ public class AnimAndImage : MonoBehaviour
         if (lecturerVoice != null && lecturerVoice.isPlaying)
             lecturerVoice.Stop();
 
-        if (anim != null)
-            anim.speed = 1f;
+        SetLecturerTalkingEnabled(false);
+        // Keep James visible in the hall; only stop talking/voice.
+        SetLecturerAvatarVisible(true);
 
         ResetLecturerAnimBools();
         IsLecturing = false;

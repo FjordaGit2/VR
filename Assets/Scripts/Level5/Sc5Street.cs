@@ -56,6 +56,11 @@ public class Sc5Street : LevelScript
     public Text statusText;
     public Camera camera;
 
+    [Space]
+    [Header("Session video (in-Unity recorder)")]
+    [Tooltip("If on, saves an MP4 of the camera view + in-task game audio under Assets/Screen Recordings (Editor Play Mode; not the PC mic). Turn off for real participants unless consented.")]
+    [SerializeField] bool enableSessionRecording = false;
+
     void Awake()
     {
         Pointer.SetActive(true);
@@ -66,7 +71,9 @@ public class Sc5Street : LevelScript
 
     void OnDestroy()
     {
-        recorder.StopRecording();
+        if (recorder != null)
+            recorder.StopRecording();
+        StopSessionRecordingIfNeeded();
     }
 
    
@@ -75,12 +82,35 @@ public class Sc5Street : LevelScript
 
         base.StartTask();
         EEG.Instance.Init("Sc7StreetPedestrian");
-        recorder.StartRecording();
+        if (recorder != null)
+            recorder.StartRecording();
+        StartSessionRecordingIfEnabled("Sc5");
         VRController.GetComponent<VRController>().enabled = true;
         TaskCanvas.GetComponent<Canvas>().enabled = false;
         TaskCanvas.GetComponent<GraphicRaycaster>().enabled = false;
         Pointer.SetActive(false);
         StartCoroutine(LimitTimer());
+    }
+
+    void StartSessionRecordingIfEnabled(string label)
+    {
+        if (!enableSessionRecording)
+            return;
+        VrSessionRecorder rec = VrSessionRecorder.Instance;
+        if (rec == null)
+            rec = FindObjectOfType<VrSessionRecorder>();
+        if (rec == null)
+        {
+            var go = new GameObject("VrSessionRecorder");
+            rec = go.AddComponent<VrSessionRecorder>();
+        }
+        rec.StartRecording(label);
+    }
+
+    void StopSessionRecordingIfNeeded()
+    {
+        if (VrSessionRecorder.Instance != null)
+            VrSessionRecorder.Instance.StopRecording();
     }
 
     void Update()
@@ -200,7 +230,9 @@ public class Sc5Street : LevelScript
             File.WriteAllText(path, "username,reaction_time_ms,map_pressed,accuracy,created_at\n", new UTF8Encoding(false));
         string row = $"{UserName},{((Time.time - startTime) * 1000).ToString("0.0")},{mapOpenCount},{accuracy},{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}\n";
         File.AppendAllText(path, row, new UTF8Encoding(false));
-        recorder.StopRecording();
+        if (recorder != null)
+            recorder.StopRecording();
+        StopSessionRecordingIfNeeded();
         StartCoroutine(SetLevel(SceneType.Sc5Questionnaire));
         NextScene();
         yield break;

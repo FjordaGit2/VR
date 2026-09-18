@@ -13,6 +13,11 @@ public class Sc4Bar : LevelScript
     public RecordingController recorder;
     public Text statusText;
 
+    [Space]
+    [Header("Session video (in-Unity recorder)")]
+    [Tooltip("If on, saves an MP4 of the camera view + in-task game audio under Assets/Screen Recordings (Editor Play Mode; not the PC mic). Turn off for real participants unless consented.")]
+    [SerializeField] bool enableSessionRecording = false;
+
     void Awake()
     {
         recorder.customPath = $"{Application.dataPath}/Data/{UserGroup}/Sc6Club/{UserName}/Behavioural";
@@ -21,7 +26,9 @@ public class Sc4Bar : LevelScript
 
     void OnDestroy()
     {
-        recorder.StopRecording();
+        if (recorder != null)
+            recorder.StopRecording();
+        StopSessionRecordingIfNeeded();
     }
 
     void Update()
@@ -31,7 +38,8 @@ public class Sc4Bar : LevelScript
         if (!isStarted && btnIsClicked)
         {
             StartTask();
-            recorder.StartRecording();
+            if (recorder != null)
+                recorder.StartRecording();
             Pointer.SetActive(false);
         }
     }
@@ -45,13 +53,44 @@ public class Sc4Bar : LevelScript
     {
         base.StartTask();
         EEG.Instance.Init("Sc6Club");
-        foreach (var a in audios)
-            a.Play();
+        // Start capture before ambient audio so the MP4 includes the beginning of bar sounds.
+        StartSessionRecordingIfEnabled("Sc4");
+        if (audios != null)
+        {
+            foreach (var a in audios)
+            {
+                if (a != null)
+                    a.Play();
+            }
+        }
+    }
+
+    void StartSessionRecordingIfEnabled(string label)
+    {
+        if (!enableSessionRecording)
+            return;
+        VrSessionRecorder rec = VrSessionRecorder.Instance;
+        if (rec == null)
+            rec = FindObjectOfType<VrSessionRecorder>();
+        if (rec == null)
+        {
+            var go = new GameObject("VrSessionRecorder");
+            rec = go.AddComponent<VrSessionRecorder>();
+        }
+        rec.StartRecording(label);
+    }
+
+    void StopSessionRecordingIfNeeded()
+    {
+        if (VrSessionRecorder.Instance != null)
+            VrSessionRecorder.Instance.StopRecording();
     }
 
     IEnumerator EndTask()
     {
-        recorder.StopRecording();
+        if (recorder != null)
+            recorder.StopRecording();
+        StopSessionRecordingIfNeeded();
         StartCoroutine(SetLevel(SceneType.Sc4Questionnaire));
         yield return new WaitForSeconds(2);
         NextScene();
