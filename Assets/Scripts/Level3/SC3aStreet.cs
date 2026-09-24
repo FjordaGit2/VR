@@ -112,6 +112,10 @@ public class SC3aStreet : LevelScript
     int _currentDistractorPresent;
     int _currentTravelDirection;
     float _carOnsetUnityTime;
+    float _lampOnUnityTime;
+    float _lampOffUnityTime;
+    double _lampOnPupilTs = double.NaN;
+    double _lampOffPupilTs = double.NaN;
     bool _responseWindowActive;
     bool _trialResponded;
     bool? _trialPressedLeft;
@@ -150,6 +154,7 @@ public class SC3aStreet : LevelScript
     int _headKinTickCount;
     string _trialCsvPath;
     bool _trialCsvHeaderWritten;
+    bool _lampEventsHeaderWritten;
     GazeData _lastGaze;
 
     void Awake()
@@ -395,8 +400,10 @@ public class SC3aStreet : LevelScript
             _currentTravelDirection = _trialTravelDirections[_trialIndex];
 
             SetLampActive(true);
+            CaptureLampTimestamp(out _lampOnUnityTime, out _lampOnPupilTs);
             yield return WaitMs(lampOnDurationMs);
             SetLampActive(false);
+            CaptureLampTimestamp(out _lampOffUnityTime, out _lampOffPupilTs);
             yield return WaitMs(lampOffGapMs);
 
             _responseWindowActive = true;
@@ -702,6 +709,59 @@ public class SC3aStreet : LevelScript
             DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "\n";
 
         File.AppendAllText(_trialCsvPath, row, new UTF8Encoding(false));
+        AppendLampEventsRow(trialIndexOneBased, unityCarOnset, pupilCarOnset);
+    }
+
+    void CaptureLampTimestamp(out float unityTime, out double pupilTs)
+    {
+        unityTime = Time.time;
+        pupilTs = _lastGaze != null ? _lastGaze.PupilTimestamp : double.NaN;
+    }
+
+    /// <summary>
+    /// One row per trial. task_trials.csv is left unchanged so older files keep their columns.
+    /// </summary>
+    void AppendLampEventsRow(int trialIndexOneBased, double unityCarOnset, double pupilCarOnset)
+    {
+        string dir = LevelScript.GetBehaviouralPath(LevelScript.DataFolderSc3aStreet);
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, "lamp_events.csv");
+
+        if (!_lampEventsHeaderWritten)
+        {
+            if (!File.Exists(path))
+            {
+                const string header =
+                    "trial_index," +
+                    "sequence_seed," +
+                    "time_since_task_start_ms_lamp_on," +
+                    "unity_time_ms_lamp_on," +
+                    "pupil_timestamp_ms_at_lamp_on," +
+                    "time_since_task_start_ms_lamp_off," +
+                    "unity_time_ms_lamp_off," +
+                    "pupil_timestamp_ms_at_lamp_off," +
+                    "time_since_task_start_ms_car_onset," +
+                    "unity_time_ms_car_onset," +
+                    "pupil_timestamp_ms_at_car_onset\n";
+                File.WriteAllText(path, header, new UTF8Encoding(false));
+            }
+            _lampEventsHeaderWritten = true;
+        }
+
+        string row =
+            trialIndexOneBased.ToString(CultureInfo.InvariantCulture) + "," +
+            _loggedSequenceSeed.ToString(CultureInfo.InvariantCulture) + "," +
+            StudyCsvTime.FormatSecondsAsMs(_lampOnUnityTime - _sessionLogStartUnityTime) + "," +
+            StudyCsvTime.FormatSecondsAsMs(_lampOnUnityTime) + "," +
+            StudyCsvTime.FormatOptionalTimestampCellMs(_lampOnPupilTs) + "," +
+            StudyCsvTime.FormatSecondsAsMs(_lampOffUnityTime - _sessionLogStartUnityTime) + "," +
+            StudyCsvTime.FormatSecondsAsMs(_lampOffUnityTime) + "," +
+            StudyCsvTime.FormatOptionalTimestampCellMs(_lampOffPupilTs) + "," +
+            StudyCsvTime.FormatSecondsAsMs(unityCarOnset - _sessionLogStartUnityTime) + "," +
+            StudyCsvTime.FormatSecondsAsMs(unityCarOnset) + "," +
+            StudyCsvTime.FormatOptionalTimestampCellMs(pupilCarOnset) + "\n";
+
+        File.AppendAllText(path, row, new UTF8Encoding(false));
     }
 
     void WriteSc3aSummaryCsv()
